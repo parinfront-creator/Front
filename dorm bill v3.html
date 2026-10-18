@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ระบบหอพัก ทองอนันต์ แมนชั่น</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family:"Sarabun","Noto Sans Thai",Tahoma,sans-serif; margin:0; background:#eef2f1; color:#222; }
+  header { background:#1f7a4d; color:#fff; padding:14px 16px; font-size:20px; font-weight:bold; position:sticky; top:0; z-index:5; }
+  main { max-width:760px; margin:0 auto; padding:12px 12px 90px; }
+  .card { background:#fff; border-radius:12px; padding:14px; margin-bottom:12px; box-shadow:0 1px 4px rgba(0,0,0,.1); }
+  h2 { margin:0 0 8px; font-size:17px; }
+  label { font-size:13px; color:#555; display:block; margin-top:8px; }
+  label.chk { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:14px; color:#333; }
+  input, select, textarea { width:100%; padding:10px; font-size:16px; border:1px solid #bbb; border-radius:8px; background:#fff; font-family:inherit; }
+  input[type=checkbox] { width:24px; height:24px; padding:0; flex:none; }
+  .g2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  button { padding:11px 14px; font-size:15px; border:0; border-radius:10px; background:#1f7a4d; color:#fff; cursor:pointer; font-family:inherit; }
+  button.gray { background:#777; } button.red { background:#c0392b; } button.blue { background:#2563eb; } button.amber { background:#d97706; } button.sm { padding:7px 10px; font-size:13px; }
+  .full { width:100%; margin-top:10px; }
+  .room { border:1px solid #d5ddda; border-radius:10px; padding:10px; margin-top:10px; background:#fafcfb; }
+  .room.vac { background:#f1f1f1; opacity:.85; }
+  .top { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .top b { font-size:17px; }
+  .sum { font-weight:bold; color:#1f7a4d; text-align:right; margin-top:6px; }
+  .warn { color:#c0392b; font-weight:normal; font-size:13px; text-align:right; }
+  .hint { font-size:12px; color:#888; }
+  .btns { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .hrow { padding:10px 0; border-bottom:1px solid #eee; }
+  .row0 { display:flex; align-items:center; gap:10px; }
+  .row0 .info { flex:1; font-size:14px; } .row0 .amt { font-weight:bold; }
+  .paid { color:#1f7a4d; } .unpaid { color:#c0392b; }
+  .tag { font-size:11px; background:#2563eb; color:#fff; padding:2px 6px; border-radius:6px; margin-left:4px; }
+  .tag.gray { background:#888; }
+  .stat { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px dashed #ddd; }
+  .bar { height:12px; background:#1f7a4d; border-radius:6px; margin-top:3px; }
+  .alert { background:#fff4e0; border-left:4px solid #d97706; padding:8px 10px; border-radius:6px; margin-top:6px; font-size:14px; }
+  .occ { background:#e8f4ee; padding:8px 10px; border-radius:8px; font-size:14px; margin-bottom:8px; }
+  details { margin-top:8px; } details summary { cursor:pointer; font-weight:bold; font-size:14px; color:#1f7a4d; }
+  nav { position:fixed; bottom:0; left:0; right:0; background:#fff; display:flex; box-shadow:0 -2px 8px rgba(0,0,0,.15); z-index:6; }
+  nav button { flex:1; background:none; color:#555; border-radius:0; padding:10px 2px; font-size:12px; }
+  nav button.on { color:#1f7a4d; font-weight:bold; border-top:3px solid #1f7a4d; }
+  .tab { display:none; } .tab.on { display:block; }
+  #modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:20; overflow:auto; padding:12px; }
+  #modal.on { display:block; }
+  .mbox { background:#fff; border-radius:12px; padding:14px; max-width:560px; margin:16px auto; }
+  input.big { font-size:28px; text-align:center; padding:14px; }
+  .rgrid { display:block; }
+  .tbl { width:100%; border-collapse:collapse; font-size:14px; }
+  .tbl th, .tbl td { border:1px solid #ccc; padding:4px 6px; }
+  .tbl th { background:#e8f4ee; position:sticky; top:0; }
+  .tbl td.n { text-align:right; }
+  .tbl input { padding:6px; font-size:15px; min-width:80px; }
+  @media (min-width:900px) {
+    main { max-width:1100px; }
+    .rgrid { display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
+    nav { justify-content:center; }
+    nav button { flex:0 1 150px; }
+  }
+
+  /* ใบบิล / ใบเสร็จ */
+  #print { display:none; }
+  #snap { position:fixed; left:-9999px; top:0; width:620px; background:#fff; }
+  .bill { padding:22px; font-size:15px; background:#fff; color:#000; page-break-after:always; }
+  .bill h1 { text-align:center; margin:0; font-size:22px; }
+  .bill .c { text-align:center; color:#555; }
+  .bill table { width:100%; border-collapse:collapse; margin-top:10px; }
+  .bill th, .bill td { border:1px solid #888; padding:6px 8px; }
+  .bill th { background:#eee; } .bill .n { text-align:right; }
+  .bill .t td { font-weight:bold; font-size:17px; }
+  .bill .foot { display:flex; justify-content:space-between; gap:12px; margin-top:12px; align-items:flex-start; }
+  .bill .qrbox { text-align:center; font-size:12px; min-width:140px; }
+  .bill .qr { display:inline-block; }
+  .sign { display:flex; justify-content:space-around; margin-top:36px; text-align:center; }
+  .sign div { width:40%; border-top:1px solid #333; padding-top:4px; }
+  @media print {
+    body { background:#fff; }
+    header, main, nav, #modal { display:none !important; }
+    #print { display:block; }
+    .bill:last-child { page-break-after:auto; }
+  }
+</style>
+</head>
+<body>
+<header>🏠 <span id="hdrName">ทองอนันต์ แมนชั่น</span></header>
+<main>
+
+  <!-- 1: บิลเดือนนี้ -->
+  <section class="tab on" id="t1">
+    <div id="alerts"></div>
+    <div class="card">
+      <h2>📅 บิลประจำเดือน</h2>
+      <div class="occ" id="occ"></div>
+      <input type="month" id="month">
+      <div class="g2" style="margin-top:8px">
+        <button id="vCard" onclick="setView('card')">🗂️ มุมมองการ์ด</button>
+        <button id="vTable" class="gray" onclick="setView('table')">📋 มุมมองตาราง (คอม)</button>
+      </div>
+      <button class="full amber" onclick="openWalk()">📝 โหมดจดมิเตอร์ทีละห้อง</button>
+      <p class="hint">กรอกเฉพาะ "เลขมิเตอร์ล่าสุด ✏️" ระบบจำเลขเดือนก่อนให้เอง และเตือนถ้าตัวเลขผิดปกติ</p>
+      <div id="rooms"></div>
+      <button class="full blue" onclick="addRoom()">➕ เพิ่มห้อง</button>
+      <button class="full blue" onclick="addRooms()">➕ เพิ่มหลายห้องพร้อมกัน</button>
+    </div>
+    <div class="card">
+      <button class="full" onclick="printCurrent()">🖨️ พิมพ์บิลทุกห้อง (เฉพาะห้องที่มีผู้เช่า)</button>
+      <button class="full gray" onclick="closeMonth()">✅ ปิดเดือน (บันทึกประวัติ + เลื่อนเลขมิเตอร์)</button>
+      <p class="hint">กด "ปิดเดือน" หลังพิมพ์/ส่งบิลเสร็จ เดือนละ 1 ครั้ง บิลจะถูกเก็บไว้ในแท็บ "จ่ายเงิน"</p>
+    </div>
+  </section>
+
+  <!-- 2: สถานะจ่าย -->
+  <section class="tab" id="t2">
+    <div class="card">
+      <h2>🔴 ค้างจ่ายทั้งหมด: <span id="allUnpaid" class="unpaid"></span></h2>
+      <div id="unpaidList"></div>
+    </div>
+    <div class="card">
+      <h2>📜 ประวัติบิล</h2>
+      <select id="hm1" onchange="setHM(this.value)"></select>
+      <div id="histList"></div>
+    </div>
+    <div class="card">
+      <h2>📦 ประวัติย้ายออก</h2>
+      <div id="moveList"></div>
+    </div>
+  </section>
+
+  <!-- 3: ซ่อม -->
+  <section class="tab" id="t3">
+    <div class="card">
+      <h2>🔧 บันทึกแจ้งซ่อม / ค่าใช้จ่าย</h2>
+      <div class="g2">
+        <div><label>ห้อง</label><select id="rp_room"></select></div>
+        <div><label>วันที่</label><input type="date" id="rp_date"></div>
+      </div>
+      <label>รายการ</label><input id="rp_desc" placeholder="เช่น เปลี่ยนหลอดไฟ ซ่อมก๊อกน้ำ">
+      <label>ค่าใช้จ่าย (บาท)</label><input id="rp_cost" type="number" inputmode="decimal" value="0">
+      <button class="full" onclick="addRepair()">➕ บันทึก</button>
+    </div>
+    <div class="card">
+      <h2>รายการซ่อม</h2>
+      <input type="month" id="rpm" onchange="renderRepairs()">
+      <div id="rpList"></div>
+    </div>
+  </section>
+
+  <!-- 4: สรุป -->
+  <section class="tab" id="t4">
+    <div class="card">
+      <h2>📊 สรุปรายได้</h2>
+      <select id="hm2" onchange="setHM(this.value)"></select>
+      <div id="sumBox"></div>
+      <div class="g2" style="margin-top:10px">
+        <button class="sm" onclick="exportCSV(false)">⬇️ Excel เดือนนี้</button>
+        <button class="sm gray" onclick="exportCSV(true)">⬇️ Excel ทุกเดือน</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>แนวโน้มรายได้ย้อนหลัง</h2>
+      <div id="trend"></div>
+    </div>
+  </section>
+
+  <!-- 5: ตั้งค่า -->
+  <section class="tab" id="t5">
+    <div class="card">
+      <h2>⚙️ ข้อมูลหอพัก</h2>
+      <label>ชื่อหอพัก</label><input id="dorm">
+      <label>ที่อยู่ / เบอร์โทร (แสดงหัวบิล)</label><input id="addr" placeholder="ใส่ที่อยู่และเบอร์โทรของหอ">
+      <div class="g2">
+        <div><label>ค่าไฟ บาท/หน่วย</label><input id="er" type="number" inputmode="decimal"></div>
+        <div><label>ค่าน้ำ บาท/หน่วย</label><input id="wr" type="number" inputmode="decimal"></div>
+        <div><label>ค่าน้ำขั้นต่ำ (บาท)</label><input id="wmin" type="number" inputmode="decimal"></div>
+        <div><label>ครบกำหนดชำระ วันที่</label><input id="dueDay" type="number" inputmode="numeric"></div>
+        <div><label>ค่าปรับจ่ายช้า (บาท/วัน)</label><input id="lateFee" type="number" inputmode="decimal"></div>
+        <div><label>เตือนเมื่อใช้เกินกี่เท่า</label><input id="warn" type="number" inputmode="decimal"></div>
+      </div>
+      <label>หมายเหตุท้ายบิล</label><input id="note" placeholder="เช่น กรุณาชำระภายในวันที่กำหนด">
+    </div>
+    <div class="card">
+      <h2>📱 QR พร้อมเพย์</h2>
+      <label>เบอร์โทรพร้อมเพย์ (10 หลัก) หรือเลขบัตรประชาชน (13 หลัก)</label>
+      <input id="pp" inputmode="numeric" placeholder="เว้นว่าง = ไม่แสดง QR">
+      <label>ชื่อบัญชี (แสดงใต้ QR)</label><input id="ppName">
+      <p class="hint">QR ใส่ยอดเงินของแต่ละห้องให้อัตโนมัติ ต้องต่ออินเทอร์เน็ตตอนสร้าง QR</p>
+    </div>
+    <div class="card">
+      <h2>💾 สำรอง / นำเข้าข้อมูล</h2>
+      <button class="full" onclick="exportData()">⬇️ ดาวน์โหลดไฟล์สำรอง</button>
+      <label>นำเข้าจากไฟล์สำรอง</label>
+      <input type="file" accept=".json" onchange="importData(this)">
+      <button class="full red" onclick="wipe()">🗑️ ลบข้อมูลทั้งหมด</button>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button class="on" onclick="tab(1)">🏠<br>บิล</button>
+  <button onclick="tab(2)">💰<br>จ่ายเงิน</button>
+  <button onclick="tab(3)">🔧<br>ซ่อม</button>
+  <button onclick="tab(4)">📊<br>สรุป</button>
+  <button onclick="tab(5)">⚙️<br>ตั้งค่า</button>
+</nav>
+
+<div id="modal"></div>
+<div id="print"></div>
+<div id="snap"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const num = v => +v || 0;
+const fmt = n => num(n).toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2});
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const KEY = "dormProV2", OLD = "dormProV1";
+let S = { cfg:{dorm:"ทองอนันต์ แมนชั่น",addr:"",er:8,wr:18,wmin:0,dueDay:5,lateFee:0,warn:2,note:"",pp:"",ppName:""}, rooms:[], hist:[], repairs:[], moves:[], seq:0 };
+let curHM = "";
+
+function load(){
+  try{
+    const x=JSON.parse(localStorage.getItem(KEY) || localStorage.getItem(OLD));
+    if(x){ S.cfg=Object.assign(S.cfg,x.cfg||{}); S.rooms=x.rooms||[]; S.hist=x.hist||[]; S.repairs=x.repairs||[]; S.moves=x.moves||[]; S.seq=x.seq||0; }
+    if(S.cfg.dorm==="หอพักสุขสบาย") S.cfg.dorm="ทองอนันต์ แมนชั่น";
+  }catch(e){}
+}
+function save(){ localStorage.setItem(KEY, JSON.stringify(S)); }
+
+/* ---------- วันที่ ---------- */
+const p2 = n => String(n).padStart(2,"0");
+const todayStr = () => { const d=new Date(); return d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate()); };
+const monthStr = () => todayStr().slice(0,7);
+const pd = s => { const [y,m,d]=String(s).split("-").map(Number); return new Date(y,m-1,d); };
+const thDate = d => d.toLocaleDateString("th-TH",{day:"numeric",month:"long",year:"numeric"});
+const thDateStr = s => s ? thDate(pd(s)) : "-";
+const thMonth = v => { const [y,m]=v.split("-").map(Number); return new Date(y,m-1,1).toLocaleDateString("th-TH",{month:"long",year:"numeric"}); };
+function dueDate(month){ const [y,m]=month.split("-").map(Number); return new Date(y, m, Math.min(num(S.cfg.dueDay)||5, 28)); }
+function lateDays(month){ const due=dueDate(month), a=pd(todayStr()); return Math.max(0, Math.round((a-due)/864e5)); }
+function lateNow(h){ return num(S.cfg.lateFee)>0 ? lateDays(h.month)*num(S.cfg.lateFee) : 0; }
+const owed = h => h.paid ? num(h.total)+num(h.late) : num(h.total)+lateNow(h);
+
+function bahtText(n){
+  const d=["ศูนย์","หนึ่ง","สอง","สาม","สี่","ห้า","หก","เจ็ด","แปด","เก้า"], p=["","สิบ","ร้อย","พัน","หมื่น","แสน"];
+  function read(s){
+    if(s.length>6) return read(s.slice(0,-6))+"ล้าน"+read(s.slice(-6));
+    let o="";
+    for(let i=0;i<s.length;i++){
+      const k=+s[i], pos=s.length-i-1; if(!k) continue;
+      if(pos===0&&k===1&&s.length>1) o+="เอ็ด";
+      else if(pos===1&&k===2) o+="ยี่สิบ";
+      else if(pos===1&&k===1) o+="สิบ";
+      else o+=d[k]+p[pos];
+    }
+    return o;
+  }
+  const [b,st]=Math.abs(n).toFixed(2).split(".");
+  return (+b===0?"ศูนย์":read(b))+"บาท"+(+st===0?"ถ้วน":read(st)+"สตางค์");
+}
+
+/* ---------- PromptPay QR ---------- */
+function crc16(s){ let c=0xFFFF; for(let i=0;i<s.length;i++){ c^=s.charCodeAt(i)<<8; for(let j=0;j<8;j++) c=(c&0x8000)?((c<<1)^0x1021)&0xFFFF:(c<<1)&0xFFFF; } return c.toString(16).toUpperCase().padStart(4,"0"); }
+const tlv = (t,v) => t + String(v.length).padStart(2,"0") + v;
+function ppPayload(id, amt){
+  id = String(id).replace(/\D/g,"");
+  const acc = id.length===13 ? tlv("02",id) : tlv("01","0066"+id.replace(/^0/,""));
+  const merchant = tlv("00","A000000677010111") + acc;
+  let p = tlv("00","01") + tlv("01","12") + tlv("29",merchant) + tlv("53","764") + (amt>0 ? tlv("54",amt.toFixed(2)) : "") + tlv("58","TH") + "6304";
+  return p + crc16(p);
+}
+function drawQRs(root){
+  root.querySelectorAll(".qr").forEach(el=>{
+    el.innerHTML="";
+    if(typeof QRCode==="undefined"){ el.textContent="(ต้องต่ออินเทอร์เน็ตเพื่อแสดง QR)"; return; }
+    new QRCode(el,{text:ppPayload(S.cfg.pp,+el.dataset.amt),width:130,height:130,correctLevel:QRCode.CorrectLevel.M});
+  });
+}
+
+/* ---------- คำนวณ ---------- */
+function calc(r){
+  const C=S.cfg, eu=num(r.e1)-num(r.e0), wu=num(r.w1)-num(r.w0);
+  const euu=Math.max(0,eu), wuu=Math.max(0,wu);
+  const ea=euu*num(C.er); let wa=wuu*num(C.wr);
+  if(num(C.wmin) && wa<num(C.wmin)) wa=num(C.wmin);
+  return { eu:euu, wu:wuu, ea, wa, rent:num(r.rent), other:num(r.other),
+           total:num(r.rent)+ea+wa+num(r.other), errE:eu<0, errW:wu<0 };
+}
+function warnings(r){
+  const c=calc(r), w=[], f=num(S.cfg.warn)||2;
+  if(c.errE) w.push("⚠️ เลขไฟล่าสุดน้อยกว่าเลขก่อนหน้า");
+  if(c.errW) w.push("⚠️ เลขน้ำล่าสุดน้อยกว่าเลขก่อนหน้า");
+  if(num(r.lastEu)>0 && c.eu>num(r.lastEu)*f) w.push(`⚠️ ใช้ไฟ ${c.eu} หน่วย สูงกว่าเดือนก่อน (${r.lastEu}) มาก`);
+  if(num(r.lastWu)>0 && c.wu>num(r.lastWu)*f) w.push(`⚠️ ใช้น้ำ ${c.wu} หน่วย สูงกว่าเดือนก่อน (${r.lastWu}) มาก`);
+  if(r.tenant && !c.errE && !c.errW && c.eu===0 && c.wu===0) w.push("ℹ️ เลขมิเตอร์ยังเท่าเดิม (ลืมกรอกหรือเปล่า?)");
+  return w;
+}
+function mkBill(r, month){
+  const c=calc(r);
+  return { id:uid(), pre:true, month, room:r.no, tenant:r.tenant, rent:c.rent, e0:num(r.e0), e1:num(r.e1), eu:c.eu,
+           w0:num(r.w0), w1:num(r.w1), wu:c.wu, er:num(S.cfg.er), wr:num(S.cfg.wr), ea:c.ea, wa:c.wa,
+           other:c.other, total:c.total, paid:false, paidDate:"", late:0 };
+}
+const occupied = () => S.rooms.filter(r=>!r.vacant);
+const newRoom = (no,rent) => ({no,tenant:"",phone:"",line:"",plate:"",start:"",end:"",deposit:0,rent:rent||3000,e0:0,e1:0,w0:0,w1:0,other:0,lastEu:0,lastWu:0,vacant:false});
+
+/* ---------- แท็บ ---------- */
+function tab(n){
+  document.querySelectorAll(".tab").forEach((e,i)=>e.classList.toggle("on", i===n-1));
+  document.querySelectorAll("nav button").forEach((e,i)=>e.classList.toggle("on", i===n-1));
+  if(n===1) renderTop();
+  if(n===2) renderHist();
+  if(n===3) renderRepairs();
+  if(n===4) renderSummary();
+  window.scrollTo(0,0);
+}
+
+/* ---------- ด้านบนของหน้าบิล: ห้องว่าง + สัญญา ---------- */
+function renderTop(){
+  const total=S.rooms.length, occ=occupied().length, vac=total-occ;
+  const lost=S.rooms.filter(r=>r.vacant).reduce((s,r)=>s+num(r.rent),0);
+  $("occ").innerHTML = total ? `เข้าพัก <b>${occ}/${total}</b> ห้อง (${Math.round(occ/total*100)}%) · ว่าง ${vac} ห้อง${vac?` (เสียรายได้ ~${fmt(lost)} บาท/เดือน)`:""}` : "ยังไม่มีห้อง";
+  const t0=pd(todayStr()), al=[];
+  occupied().forEach(r=>{
+    if(!r.end) return;
+    const dl=Math.round((pd(r.end)-t0)/864e5);
+    if(dl<0) al.push(`ห้อง ${esc(r.no)} ${esc(r.tenant)}: สัญญาหมดแล้ว ${-dl} วัน (${thDateStr(r.end)})`);
+    else if(dl<=30) al.push(`ห้อง ${esc(r.no)} ${esc(r.tenant)}: สัญญาจะหมดใน ${dl} วัน (${thDateStr(r.end)})`);
+  });
+  $("alerts").innerHTML = al.length ? `<div class="card"><h2>⏰ สัญญาใกล้หมด</h2>${al.map(a=>`<div class="alert">${a}</div>`).join("")}</div>` : "";
+}
+
+/* ---------- ห้อง ---------- */
+function roomSum(i){
+  const r=S.rooms[i], c=calc(r), w=warnings(r);
+  return `ไฟ ${c.eu} หน่วย · น้ำ ${c.wu} หน่วย → รวม ${fmt(c.total)} บาท` + w.map(x=>`<div class="warn">${x}</div>`).join("");
+}
+let view="card";
+try{ view=localStorage.getItem("dormView")||(window.innerWidth>=900?"table":"card"); }catch(e){}
+function setView(v){
+  view=v; try{ localStorage.setItem("dormView",v); }catch(e){}
+  $("vCard").className = v==="card" ? "" : "gray";
+  $("vTable").className = v==="table" ? "" : "gray";
+  renderRooms();
+}
+function tblWarn(r){ const w=warnings(r); return w.length ? w[0] : ""; }
+function renderTable(){
+  const rows=S.rooms.map((r,i)=> r.vacant ? "" : `<tr>
+    <td><b>${esc(r.no)}</b></td><td>${esc(r.tenant)}</td>
+    <td class="n">${esc(r.e0)}</td><td><input type="number" inputmode="decimal" value="${esc(r.e1)}" oninput="updT(${i},'e1',this.value)"></td>
+    <td class="n">${esc(r.w0)}</td><td><input type="number" inputmode="decimal" value="${esc(r.w1)}" oninput="updT(${i},'w1',this.value)"></td>
+    <td><input type="number" inputmode="decimal" value="${esc(r.other)}" oninput="updT(${i},'other',this.value)"></td>
+    <td class="n" id="tt${i}"><b>${fmt(calc(r).total)}</b></td>
+    <td class="warn" id="tw${i}" style="text-align:left">${tblWarn(r)}</td></tr>`).join("");
+  $("rooms").innerHTML = S.rooms.length ? `<div style="overflow-x:auto"><table class="tbl">
+    <thead><tr><th>ห้อง</th><th>ผู้เช่า</th><th>ไฟก่อน</th><th>ไฟล่าสุด ✏️</th><th>น้ำก่อน</th><th>น้ำล่าสุด ✏️</th><th>ค่าอื่นๆ</th><th>รวม (บาท)</th><th>เตือน</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>
+    <p class="hint">กด Tab เพื่อไปช่องถัดไป · ห้องว่างไม่แสดงในตาราง · แก้เลขห้อง/ข้อมูลผู้เช่าได้ในมุมมองการ์ด</p>` : '<p class="hint">ยังไม่มีห้อง กด "เพิ่มห้อง" ด้านล่าง</p>';
+}
+function updT(i,k,v){
+  S.rooms[i][k]=v; save();
+  const t=$("tt"+i), w=$("tw"+i);
+  if(t) t.innerHTML="<b>"+fmt(calc(S.rooms[i]).total)+"</b>";
+  if(w) w.textContent=tblWarn(S.rooms[i]);
+}
+function renderRooms(){
+  if(view==="table"){ renderTable(); return; }
+  $("rooms").innerHTML = '<div class="rgrid">' + (S.rooms.map((r,i)=>{
+    const head=`<div class="top"><b>ห้อง ${esc(r.no)||"?"} ${r.vacant?'<span class="tag gray">ว่าง</span>':""}</b>
+      <div class="btns" style="margin:0">${r.vacant?"":`<button class="gray sm" onclick="openMoveOut(${i})">🚪 ย้ายออก</button>`}<button class="red sm" onclick="delRoom(${i})">ลบ</button></div></div>`;
+    const base=`<div class="g2">
+        <div><label>เลขห้อง</label><input value="${esc(r.no)}" oninput="upd(${i},'no',this.value)"></div>
+        <div><label>ค่าห้อง/เดือน</label><input type="number" inputmode="decimal" value="${esc(r.rent)}" oninput="upd(${i},'rent',this.value)"></div>
+      </div>
+      <label class="chk"><input type="checkbox" ${r.vacant?"checked":""} onchange="setVacant(${i},this.checked)"> ห้องว่าง (ไม่ออกบิล)</label>`;
+    if(r.vacant) return `<div class="room vac">${head}${base}</div>`;
+    return `<div class="room">${head}${base}
+      <label>ชื่อผู้เช่า</label><input value="${esc(r.tenant)}" oninput="upd(${i},'tenant',this.value)">
+      <details><summary>👤 ข้อมูลผู้เช่า / สัญญา / เงินประกัน</summary>
+        <div class="g2">
+          <div><label>เบอร์โทร</label><input type="tel" value="${esc(r.phone)}" oninput="upd(${i},'phone',this.value)"></div>
+          <div><label>ไลน์</label><input value="${esc(r.line)}" oninput="upd(${i},'line',this.value)"></div>
+          <div><label>ทะเบียนรถ</label><input value="${esc(r.plate)}" oninput="upd(${i},'plate',this.value)"></div>
+          <div><label>เงินประกัน (บาท)</label><input type="number" inputmode="decimal" value="${esc(r.deposit)}" oninput="upd(${i},'deposit',this.value)"></div>
+          <div><label>วันเริ่มสัญญา</label><input type="date" value="${esc(r.start)}" oninput="upd(${i},'start',this.value)"></div>
+          <div><label>วันสิ้นสุดสัญญา</label><input type="date" value="${esc(r.end)}" oninput="upd(${i},'end',this.value)"></div>
+        </div>
+      </details>
+      <div class="g2">
+        <div><label>ไฟ เลขก่อนหน้า</label><input type="number" inputmode="decimal" value="${esc(r.e0)}" oninput="upd(${i},'e0',this.value)"></div>
+        <div><label>ไฟ เลขล่าสุด ✏️</label><input type="number" inputmode="decimal" value="${esc(r.e1)}" oninput="upd(${i},'e1',this.value)"></div>
+        <div><label>น้ำ เลขก่อนหน้า</label><input type="number" inputmode="decimal" value="${esc(r.w0)}" oninput="upd(${i},'w0',this.value)"></div>
+        <div><label>น้ำ เลขล่าสุด ✏️</label><input type="number" inputmode="decimal" value="${esc(r.w1)}" oninput="upd(${i},'w1',this.value)"></div>
+      </div>
+      <label>ค่าอื่นๆ (บาท)</label><input type="number" inputmode="decimal" value="${esc(r.other)}" oninput="upd(${i},'other',this.value)">
+      <div class="sum" id="sum${i}">${roomSum(i)}</div>
+      <div class="btns">
+        <button class="sm" onclick="printOne(${i})">🖨️ พิมพ์ห้องนี้</button>
+        <button class="sm blue" onclick="shareRoom(${i})">🖼️ ส่งรูปไลน์</button>
+      </div>
+    </div>`;
+  }).join("") || '<p class="hint">ยังไม่มีห้อง กด "เพิ่มห้อง" ด้านล่าง</p>') + '</div>';
+}
+function upd(i,k,v){
+  S.rooms[i][k]=v; save();
+  const el=$("sum"+i); if(el) el.innerHTML=roomSum(i);
+  if(k==="end"||k==="tenant") renderTop();
+}
+function setVacant(i,on){ S.rooms[i].vacant=on; save(); renderRooms(); renderTop(); }
+function addRoom(){ S.rooms.push(newRoom("",S.rooms[0]?S.rooms[0].rent:3000)); save(); renderRooms(); renderTop(); }
+function addRooms(){
+  const s=prompt("พิมพ์เลขห้องที่ต้องการเพิ่ม คั่นด้วยเว้นวรรค เช่น 101 102 103 201 202");
+  if(!s) return;
+  const rent=S.rooms[0]?S.rooms[0].rent:3000;
+  s.split(/[\s,]+/).filter(Boolean).forEach(no=>{ if(!S.rooms.some(r=>r.no===no)) S.rooms.push(newRoom(no,rent)); });
+  S.rooms.sort((a,b)=>String(a.no).localeCompare(String(b.no),"th",{numeric:true}));
+  save(); renderRooms(); renderTop();
+}
+function delRoom(i){ if(confirm("ลบห้องนี้? (ประวัติบิลเก่ายังอยู่)")){ S.rooms.splice(i,1); save(); renderRooms(); renderTop(); } }
+
+/* ---------- ใบบิล / ใบเสร็จ ---------- */
+function docHead(title){
+  const C=S.cfg;
+  return `<h1>${esc(C.dorm)}</h1><div class="c">${esc(C.addr)}</div><h2 class="c" style="margin:8px 0">${title}</h2>`;
+}
+function itemRows(b, late){
+  let h=`<tr><td>ค่าเช่าห้อง</td><td></td><td></td><td></td><td></td><td class="n">${fmt(b.rent)}</td></tr>
+      <tr><td>ค่าไฟฟ้า</td><td class="n">${b.e0}</td><td class="n">${b.e1}</td><td class="n">${b.eu}</td><td class="n">${fmt(b.er)}</td><td class="n">${fmt(b.ea)}</td></tr>
+      <tr><td>ค่าน้ำประปา</td><td class="n">${b.w0}</td><td class="n">${b.w1}</td><td class="n">${b.wu}</td><td class="n">${fmt(b.wr)}</td><td class="n">${fmt(b.wa)}</td></tr>`;
+  if(num(b.other)) h+=`<tr><td>ค่าอื่นๆ</td><td></td><td></td><td></td><td></td><td class="n">${fmt(b.other)}</td></tr>`;
+  if(late>0){ const ld=num(S.cfg.lateFee)?Math.round(late/num(S.cfg.lateFee)):0; h+=`<tr><td>ค่าปรับล่าช้า${ld?` ${ld} วัน`:""}</td><td></td><td></td><td></td><td></td><td class="n">${fmt(late)}</td></tr>`; }
+  return h;
+}
+function billHTML(b){
+  const C=S.cfg, issue=new Date(), due=dueDate(b.month);
+  const late=b.pre?0:(b.paid?num(b.late):lateNow(b)), grand=num(b.total)+late;
+  const qr = (C.pp && !b.paid) ? `<div class="qrbox"><div class="qr" data-amt="${grand}"></div><div>สแกนจ่ายพร้อมเพย์<br><b>${fmt(grand)} บาท</b>${C.ppName?`<br>${esc(C.ppName)}`:""}</div></div>` : "";
+  return `<div class="bill">${docHead("ใบแจ้งค่าเช่าห้องพัก")}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px">
+      <div>วันที่: <b>${thDate(issue)}</b></div><div>ห้อง: <b>${esc(b.room)}</b></div>
+      <div>ผู้เช่า: <b>${esc(b.tenant)||"-"}</b></div><div>ประจำเดือน: <b>${thMonth(b.month)}</b></div>
+      <div>ครบกำหนดชำระ: <b>${thDate(due)}</b></div>
+    </div>
+    <table>
+      <tr><th>รายการ</th><th class="n">เลขก่อน</th><th class="n">เลขหลัง</th><th class="n">หน่วย</th><th class="n">อัตรา</th><th class="n">บาท</th></tr>
+      ${itemRows(b,late)}
+      <tr class="t"><td colspan="5" class="n">รวมทั้งสิ้น</td><td class="n">${fmt(grand)}</td></tr>
+    </table>
+    <div class="foot">
+      <div>(${bahtText(grand)})${C.note?`<p>หมายเหตุ: ${esc(C.note)}</p>`:""}</div>
+      ${qr}
+    </div>
+    <div class="sign"><div>ผู้เช่า</div><div>ผู้รับเงิน / เจ้าของหอ</div></div>
+  </div>`;
+}
+function receiptHTML(h){
+  const late=num(h.late), grand=num(h.total)+late;
+  return `<div class="bill">${docHead("ใบเสร็จรับเงิน")}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px">
+      <div>เลขที่: <b>${esc(h.rc||"-")}</b></div><div>วันที่รับเงิน: <b>${thDateStr(h.paidDate)}</b></div>
+      <div>ห้อง: <b>${esc(h.room)}</b></div><div>ได้รับเงินจาก: <b>${esc(h.tenant)||"-"}</b></div>
+      <div style="grid-column:1/3">เป็นค่าเช่าและค่าบริการประจำเดือน: <b>${thMonth(h.month)}</b></div>
+    </div>
+    <table>
+      <tr><th>รายการ</th><th class="n">เลขก่อน</th><th class="n">เลขหลัง</th><th class="n">หน่วย</th><th class="n">อัตรา</th><th class="n">บาท</th></tr>
+      ${itemRows(h,late)}
+      <tr class="t"><td colspan="5" class="n">รวมที่ได้รับ</td><td class="n">${fmt(grand)}</td></tr>
+    </table>
+    <p>(${bahtText(grand)})</p>
+    ${h.note?`<p>หมายเหตุ: ${esc(h.note)}</p>`:""}
+    <div class="sign"><div>ผู้จ่ายเงิน</div><div>ผู้รับเงิน / เจ้าของหอ</div></div>
+  </div>`;
+}
+function printDocs(list){
+  if(!list.length){ alert("ยังไม่มีห้อง/บิล"); return; }
+  const box=$("print"); box.innerHTML=list.join(""); drawQRs(box);
+  setTimeout(()=>window.print(), 500);
+}
+const curMonth = () => $("month").value;
+function printCurrent(){ printDocs(occupied().map(r=>billHTML(mkBill(r,curMonth())))); }
+function printOne(i){ printDocs([billHTML(mkBill(S.rooms[i],curMonth()))]); }
+function printHist(id){ printDocs(S.hist.filter(h=>h.id===id).map(billHTML)); }
+function printReceipt(id){ printDocs(S.hist.filter(h=>h.id===id).map(receiptHTML)); }
+
+async function shareHTML(html, name){
+  if(typeof html2canvas==="undefined"){ alert("ต้องต่ออินเทอร์เน็ตเพื่อสร้างรูป"); return; }
+  const box=$("snap"); box.innerHTML=html; drawQRs(box);
+  await new Promise(r=>setTimeout(r,500));
+  const canvas=await html2canvas(box,{backgroundColor:"#ffffff",scale:2});
+  canvas.toBlob(async blob=>{
+    const file=new File([blob],name+".png",{type:"image/png"});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file]}); return; }catch(e){ if(e.name==="AbortError") return; }
+    }
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=file.name; a.click();
+    alert("บันทึกรูปแล้ว เปิดไลน์แล้วส่งรูปนี้ให้ผู้เช่าได้เลย");
+  });
+}
+function shareRoom(i){ const b=mkBill(S.rooms[i],curMonth()); shareHTML(billHTML(b),`บิลห้อง${b.room}-${b.month}`); }
+function shareHist(id){ const h=S.hist.find(x=>x.id===id); shareHTML(billHTML(h),`บิลห้อง${h.room}-${h.month}`); }
+function shareReceipt(id){ const h=S.hist.find(x=>x.id===id); shareHTML(receiptHTML(h),`ใบเสร็จห้อง${h.room}-${h.month}`); }
+
+function copyText(t){
+  if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(()=>alert("คัดลอกแล้ว วางในไลน์ได้เลย"),()=>prompt("คัดลอกข้อความนี้",t));
+  else prompt("คัดลอกข้อความนี้",t);
+}
+function remindText(h){
+  const C=S.cfg, late=h.paid?0:lateNow(h), g=num(h.total)+late;
+  let t=`สวัสดีค่ะ/ครับ คุณ${h.tenant||""} ห้อง ${h.room}\nแจ้งยอดค่าเช่าและค่าบริการประจำเดือน${thMonth(h.month)} จำนวน ${fmt(g)} บาท`;
+  if(late>0) t+=` (รวมค่าปรับล่าช้า ${fmt(late)} บาท)`;
+  t+=`\nกำหนดชำระ ${thDate(dueDate(h.month))}`;
+  if(C.pp) t+=`\nโอนพร้อมเพย์ ${C.pp}${C.ppName?" ("+C.ppName+")":""}`;
+  t+=`\nหากชำระแล้วขออภัยด้วยค่ะ/ครับ ขอบคุณค่ะ/ครับ\n${C.dorm}`;
+  return t;
+}
+function remind(id){ copyText(remindText(S.hist.find(h=>h.id===id))); }
+
+/* ---------- โหมดจดมิเตอร์ทีละห้อง ---------- */
+let wkList=[], wkPos=0;
+function openWalk(){
+  wkList=S.rooms.map((r,i)=>i).filter(i=>!S.rooms[i].vacant);
+  if(!wkList.length){ alert("ยังไม่มีห้องที่มีผู้เช่า"); return; }
+  wkPos=0; renderWalk(); $("modal").classList.add("on");
+}
+function renderWalk(){
+  const i=wkList[wkPos], r=S.rooms[i], last=wkPos===wkList.length-1;
+  $("modal").innerHTML=`<div class="mbox">
+    <div class="hint">ห้องที่ ${wkPos+1} จาก ${wkList.length}</div>
+    <h2 style="font-size:30px;margin:4px 0">ห้อง ${esc(r.no)}</h2><div>${esc(r.tenant)||"-"}</div>
+    <label>⚡ ไฟ — เลขเดิม ${esc(r.e0)}</label>
+    <input id="wk_e" class="big" type="number" inputmode="decimal" placeholder="เลขมิเตอร์ไฟล่าสุด" value="${num(r.e1)===num(r.e0)?"":esc(r.e1)}" oninput="wkUpd()" onkeydown="if(event.key==='Enter')$('wk_w').focus()">
+    <label>💧 น้ำ — เลขเดิม ${esc(r.w0)}</label>
+    <input id="wk_w" class="big" type="number" inputmode="decimal" placeholder="เลขมิเตอร์น้ำล่าสุด" value="${num(r.w1)===num(r.w0)?"":esc(r.w1)}" oninput="wkUpd()" onkeydown="if(event.key==='Enter')wkNext()">
+    <div class="sum" id="wk_sum"></div>
+    <div class="g2" style="margin-top:12px"><button class="gray" onclick="wkPrev()">◀ ก่อนหน้า</button><button onclick="wkNext()">${last?"✅ เสร็จ":"ถัดไป ▶"}</button></div>
+    <button class="full gray" onclick="wkClose()">ปิด</button></div>`;
+  wkUpd();
+  setTimeout(()=>{ const e=$("wk_e"); if(e&&e.focus) e.focus(); },50);
+}
+function wkUpd(){
+  const i=wkList[wkPos], r=S.rooms[i], e=$("wk_e").value, w=$("wk_w").value;
+  if(e!=="") r.e1=e;
+  if(w!=="") r.w1=w;
+  save(); $("wk_sum").innerHTML=roomSum(i);
+}
+function wkNext(){
+  wkUpd();
+  if(wkPos<wkList.length-1){ wkPos++; renderWalk(); }
+  else { const n=wkList.length; wkClose(); alert("จดมิเตอร์ครบ "+n+" ห้องแล้ว ✓"); }
+}
+function wkPrev(){ wkUpd(); if(wkPos>0){ wkPos--; renderWalk(); } }
+function wkClose(){ $("modal").classList.remove("on"); $("modal").innerHTML=""; renderRooms(); renderTop(); }
+
+/* ---------- ส่งออก Excel (CSV) ---------- */
+function csvCell(v){ v=String(v ?? ""); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }
+function exportCSV(all){
+  const list=S.hist.filter(h=>all||h.month===curHM).sort((a,b)=>a.month.localeCompare(b.month)||String(a.room).localeCompare(String(b.room),"th",{numeric:true}));
+  if(!list.length){ alert("ยังไม่มีข้อมูลบิล ปิดเดือนอย่างน้อย 1 ครั้งก่อน"); return; }
+  const head=["เดือน","ห้อง","ผู้เช่า","ค่าห้อง","ไฟก่อน","ไฟหลัง","หน่วยไฟ","ค่าไฟ","น้ำก่อน","น้ำหลัง","หน่วยน้ำ","ค่าน้ำ","ค่าอื่นๆ","ค่าปรับ","รวม","สถานะ","วันที่จ่าย","เลขใบเสร็จ"];
+  const rows=list.map(h=>{ const late=h.paid?num(h.late):lateNow(h);
+    return [h.month,h.room,h.tenant,h.rent,h.e0,h.e1,h.eu,h.ea,h.w0,h.w1,h.wu,h.wa,h.other,late,num(h.total)+late,h.paid?"จ่ายแล้ว":"ค้างจ่าย",h.paidDate,h.rc||""]; });
+  const csv="﻿"+[head,...rows].map(r=>r.map(csvCell).join(",")).join("\r\n");
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+  a.download=`บิลหอพัก-${all?"ทุกเดือน":curHM}.csv`; a.click();
+}
+
+/* ---------- ปิดเดือน ---------- */
+function closeMonth(){
+  const month=curMonth(), occ=occupied();
+  if(!occ.length){ alert("ยังไม่มีห้องที่มีผู้เช่า"); return; }
+  if(occ.some(r=>calc(r).errE||calc(r).errW) && !confirm("มีห้องที่เลขมิเตอร์ผิดปกติ ยังจะปิดเดือนไหม?")) return;
+  if(!confirm(`ปิดเดือน ${thMonth(month)}?\nบิลจะถูกบันทึกประวัติ และเลขล่าสุดจะกลายเป็นเลขก่อนหน้า`)) return;
+  occ.forEach(r=>{
+    const c=calc(r), b=mkBill(r,month); delete b.pre;
+    const old=S.hist.find(h=>h.month===month && h.room===r.no && !h.final);
+    if(old){ b.paid=old.paid; b.paidDate=old.paidDate; b.late=old.late; b.rc=old.rc; S.hist=S.hist.filter(h=>h!==old); }
+    S.hist.push(b);
+    r.lastEu=c.eu; r.lastWu=c.wu; r.e0=r.e1; r.w0=r.w1; r.other=0;
+  });
+  save(); renderRooms(); fillMonths();
+  alert("ปิดเดือนเรียบร้อย ดูบิลได้ที่แท็บ 'จ่ายเงิน'");
+}
+
+/* ---------- สถานะจ่าย ---------- */
+function months(){ return [...new Set(S.hist.map(h=>h.month))].sort().reverse(); }
+function fillMonths(){
+  const ms=months(); if(!ms.includes(curHM)) curHM=ms[0]||"";
+  const opts=ms.map(m=>`<option value="${m}" ${m===curHM?"selected":""}>${thMonth(m)}</option>`).join("") || "<option>ยังไม่มีประวัติ</option>";
+  $("hm1").innerHTML=opts; $("hm2").innerHTML=opts;
+  renderHist(); renderSummary();
+}
+function setHM(v){ curHM=v; fillMonths(); }
+function nextRc(){ S.seq=(S.seq||0)+1; return "RC-"+String(S.seq).padStart(4,"0"); }
+function markPaid(h,note){ h.late=lateNow(h); h.paid=true; h.paidDate=todayStr(); if(!h.rc) h.rc=nextRc(); if(note) h.note=note; }
+function setPaid(id,on){
+  const h=S.hist.find(x=>x.id===id);
+  if(on) markPaid(h); else { h.paid=false; h.paidDate=""; h.late=0; }
+  save(); renderHist(); renderSummary();
+}
+function histRow(h, showMonth){
+  const late=h.paid?num(h.late):lateNow(h), g=num(h.total)+late;
+  const ld=late&&num(S.cfg.lateFee)?Math.round(late/num(S.cfg.lateFee)):0;
+  const status=h.paid
+    ? `<span class="paid">จ่ายแล้ว ${thDateStr(h.paidDate)}${late?` (รวมค่าปรับ ${fmt(late)})`:""}${h.rc?` · ${esc(h.rc)}`:""}</span>${h.note?`<br><span class="hint">${esc(h.note)}</span>`:""}`
+    : `<span class="unpaid">ค้างจ่าย</span> <span class="hint">ครบกำหนด ${thDate(dueDate(h.month))}</span>${ld?`<br><span class="unpaid">เลยกำหนด ${ld} วัน ค่าปรับ ${fmt(late)}</span>`:""}`;
+  const btns = h.paid
+    ? `<button class="sm" onclick="printReceipt('${h.id}')">🧾 พิมพ์ใบเสร็จ</button><button class="sm blue" onclick="shareReceipt('${h.id}')">🖼️ รูปใบเสร็จ</button><button class="sm gray" onclick="printHist('${h.id}')">🖨️ บิล</button>`
+    : `<button class="sm amber" onclick="remind('${h.id}')">💬 ข้อความทวง</button><button class="sm" onclick="printHist('${h.id}')">🖨️ บิล</button><button class="sm blue" onclick="shareHist('${h.id}')">🖼️ รูปบิล</button>`;
+  return `<div class="hrow"><div class="row0">
+    <input type="checkbox" ${h.paid?"checked":""} onchange="setPaid('${h.id}',this.checked)">
+    <div class="info">ห้อง ${esc(h.room)} · ${esc(h.tenant)||"-"}${h.final?'<span class="tag">บิลสุดท้าย</span>':""}${showMonth?`<br><span class="hint">${thMonth(h.month)}</span>`:""}<br>${status}</div>
+    <div class="amt">${fmt(g)}</div></div>
+    <div class="btns">${btns}</div></div>`;
+}
+function renderHist(){
+  const un=S.hist.filter(h=>!h.paid).sort((a,b)=>a.month.localeCompare(b.month));
+  $("allUnpaid").textContent = fmt(un.reduce((s,h)=>s+owed(h),0)) + " บาท";
+  $("unpaidList").innerHTML = un.map(h=>histRow(h,true)).join("") || '<p class="hint">ไม่มียอดค้าง 🎉</p>';
+  $("histList").innerHTML = S.hist.filter(h=>h.month===curHM).sort((a,b)=>String(a.room).localeCompare(String(b.room),"th",{numeric:true})).map(h=>histRow(h,false)).join("") || '<p class="hint">ยังไม่มีบิลในประวัติ</p>';
+  $("moveList").innerHTML = S.moves.slice().reverse().map(m=>`<div class="stat"><span>${thDateStr(m.date)} · ห้อง ${esc(m.room)} ${esc(m.tenant)}</span><b class="${m.refund>=0?"paid":"unpaid"}">${m.refund>=0?"คืน":"เก็บเพิ่ม"} ${fmt(Math.abs(m.refund))}</b></div>`).join("") || '<p class="hint">ยังไม่มีประวัติ</p>';
+}
+
+/* ---------- ย้ายออก / คืนเงินประกัน ---------- */
+let moIdx=-1;
+function openMoveOut(i){
+  moIdx=i; const r=S.rooms[i];
+  const f=(id,label,val,type)=>`<div><label>${label}</label><input id="${id}" type="${type||"number"}" inputmode="decimal" value="${esc(val)}" oninput="moRender()"></div>`;
+  $("modal").innerHTML=`<div class="mbox"><h2>🚪 ย้ายออก ห้อง ${esc(r.no)} ${esc(r.tenant)}</h2>
+    <p class="hint">กรอกเลขมิเตอร์วันย้ายออก และรายการหักเงิน ระบบรวมยอดค้างเดิมของห้องนี้ให้อัตโนมัติ</p>
+    <div class="g2">
+      ${f("mo_e0","ไฟ เลขก่อนหน้า",r.e0)}${f("mo_e1","ไฟ เลขวันย้ายออก",r.e1)}
+      ${f("mo_w0","น้ำ เลขก่อนหน้า",r.w0)}${f("mo_w1","น้ำ เลขวันย้ายออก",r.w1)}
+      ${f("mo_rent","ค่าห้องงวดสุดท้าย (ปรับตามวันได้)",r.rent)}${f("mo_other","ค่าอื่นๆ",0)}
+      ${f("mo_dmg","หักค่าเสียหาย/ทำความสะอาด",0)}${f("mo_dmgnote","รายละเอียดที่หัก","", "text")}
+    </div>
+    <div id="mo_res" style="margin-top:10px"></div>
+    <div class="btns"><button class="sm" onclick="moPrint()">🖨️ พิมพ์ใบสรุป</button><button class="sm blue" onclick="moShare()">🖼️ ส่งรูป</button></div>
+    <button class="full red" onclick="moConfirm()">✅ ยืนยันย้ายออก (ตั้งห้องเป็นว่าง)</button>
+    <button class="full gray" onclick="moClose()">ปิด</button></div>`;
+  $("modal").classList.add("on"); moRender();
+}
+function moClose(){ $("modal").classList.remove("on"); $("modal").innerHTML=""; moIdx=-1; }
+function moVals(){
+  const r=S.rooms[moIdx], g=id=>num($(id).value);
+  const eu=Math.max(0,g("mo_e1")-g("mo_e0")), wu=Math.max(0,g("mo_w1")-g("mo_w0"));
+  const ea=eu*num(S.cfg.er); let wa=wu*num(S.cfg.wr);
+  if(num(S.cfg.wmin)&&wa<num(S.cfg.wmin)) wa=num(S.cfg.wmin);
+  const rent=g("mo_rent"), other=g("mo_other"), dmg=g("mo_dmg");
+  const fin=rent+ea+wa+other;
+  const unpaid=S.hist.filter(h=>h.room===r.no&&!h.paid).reduce((s,h)=>s+owed(h),0);
+  const dep=num(r.deposit);
+  return { r,eu,wu,ea,wa,rent,other,dmg,fin,unpaid,dep,refund:dep-fin-unpaid-dmg,
+           e0:g("mo_e0"),e1:g("mo_e1"),w0:g("mo_w0"),w1:g("mo_w1"), dmgnote:$("mo_dmgnote").value };
+}
+function moRows(v){
+  return `<div class="stat"><span>เงินประกัน</span><b>${fmt(v.dep)}</b></div>
+    <div class="stat"><span>ค่าห้องงวดสุดท้าย</span><b>− ${fmt(v.rent)}</b></div>
+    <div class="stat"><span>ค่าไฟ (${v.eu} หน่วย)</span><b>− ${fmt(v.ea)}</b></div>
+    <div class="stat"><span>ค่าน้ำ (${v.wu} หน่วย)</span><b>− ${fmt(v.wa)}</b></div>
+    ${v.other?`<div class="stat"><span>ค่าอื่นๆ</span><b>− ${fmt(v.other)}</b></div>`:""}
+    <div class="stat"><span>ยอดค้างเดิม (รวมค่าปรับ)</span><b>− ${fmt(v.unpaid)}</b></div>
+    ${v.dmg?`<div class="stat"><span>ค่าเสียหาย${v.dmgnote?" ("+esc(v.dmgnote)+")":""}</span><b>− ${fmt(v.dmg)}</b></div>`:""}`;
+}
+function moRender(){
+  const v=moVals();
+  $("mo_res").innerHTML = moRows(v) + `<div class="stat" style="font-size:18px"><b>${v.refund>=0?"คืนเงินประกันให้ผู้เช่า":"ผู้เช่าต้องจ่ายเพิ่ม"}</b><b class="${v.refund>=0?"paid":"unpaid"}">${fmt(Math.abs(v.refund))} บาท</b></div>`;
+}
+function moDoc(v){
+  return `<div class="bill">${docHead("ใบสรุปการย้ายออกและคืนเงินประกัน")}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px">
+      <div>วันที่: <b>${thDate(new Date())}</b></div><div>ห้อง: <b>${esc(v.r.no)}</b></div>
+      <div>ผู้เช่า: <b>${esc(v.r.tenant)||"-"}</b></div>
+    </div>
+    <div style="margin-top:10px">${moRows(v)}
+      <div class="stat" style="font-size:18px"><b>${v.refund>=0?"คืนเงินประกันให้ผู้เช่า":"ผู้เช่าต้องจ่ายเพิ่ม"}</b><b>${fmt(Math.abs(v.refund))} บาท</b></div></div>
+    <p>(${bahtText(v.refund)})</p>
+    <div class="sign"><div>ผู้เช่า</div><div>ผู้ให้เช่า / เจ้าของหอ</div></div></div>`;
+}
+function moPrint(){ printDocs([moDoc(moVals())]); }
+function moShare(){ const v=moVals(); shareHTML(moDoc(v),`สรุปย้ายออกห้อง${v.r.no}`); }
+function moConfirm(){
+  const v=moVals(), r=v.r;
+  if(!confirm(`ยืนยันย้ายออก ห้อง ${r.no}?\nยอด${v.refund>=0?"คืนเงินประกัน":"เก็บเพิ่ม"} ${fmt(Math.abs(v.refund))} บาท\nบิลค้างเดิมของห้องนี้จะถูกบันทึกว่าหักจากเงินประกันแล้ว`)) return;
+  const note="หักจากเงินประกัน (ย้ายออก)";
+  S.hist.filter(h=>h.room===r.no&&!h.paid).forEach(h=>markPaid(h,note));
+  const fb={ id:uid(), final:true, month:monthStr(), room:r.no, tenant:r.tenant, rent:v.rent, e0:v.e0, e1:v.e1, eu:v.eu,
+             w0:v.w0, w1:v.w1, wu:v.wu, er:num(S.cfg.er), wr:num(S.cfg.wr), ea:v.ea, wa:v.wa, other:v.other,
+             total:v.fin, paid:true, paidDate:todayStr(), late:0, rc:nextRc(), note:"บิลสุดท้าย "+note };
+  S.hist.push(fb);
+  if(v.dmg) S.repairs.push({id:uid(),date:todayStr(),room:r.no,desc:"หักค่าเสียหายตอนย้ายออก"+(v.dmgnote?" ("+v.dmgnote+")":""),cost:0,income:v.dmg});
+  S.moves.push({id:uid(),date:todayStr(),room:r.no,tenant:r.tenant,deposit:v.dep,final:v.fin,unpaid:v.unpaid,dmg:v.dmg,dmgnote:v.dmgnote,refund:v.refund});
+  Object.assign(r,{tenant:"",phone:"",line:"",plate:"",start:"",end:"",deposit:0,vacant:true,e0:v.e1,e1:v.e1,w0:v.w1,w1:v.w1,other:0,lastEu:0,lastWu:0});
+  save(); moClose(); renderRooms(); renderTop(); fillMonths();
+  alert("ย้ายออกเรียบร้อย ห้อง "+r.no+" ตั้งเป็นห้องว่างแล้ว");
+}
+
+/* ---------- ซ่อม ---------- */
+function renderRepairs(){
+  const sel=$("rp_room"), keep=sel.value;
+  sel.innerHTML=`<option value="ส่วนกลาง">ส่วนกลาง</option>`+S.rooms.map(r=>`<option value="${esc(r.no)}">ห้อง ${esc(r.no)}</option>`).join("");
+  if(keep) sel.value=keep;
+  const m=$("rpm").value || monthStr();
+  const list=S.repairs.filter(r=>String(r.date).startsWith(m) && !r.income).sort((a,b)=>b.date.localeCompare(a.date));
+  const tot=list.reduce((s,r)=>s+num(r.cost),0);
+  $("rpList").innerHTML = (list.map(r=>`<div class="hrow"><div class="row0"><div class="info"><b>${esc(r.room)}</b> · ${thDateStr(r.date)}<br>${esc(r.desc)}</div><div class="amt">${fmt(r.cost)}</div><button class="red sm" onclick="delRepair('${r.id}')">ลบ</button></div></div>`).join("")
+    || '<p class="hint">ไม่มีรายการในเดือนนี้</p>') + `<div class="stat" style="margin-top:8px"><b>รวมค่าใช้จ่ายเดือนนี้</b><b>${fmt(tot)}</b></div>`;
+}
+function addRepair(){
+  const desc=$("rp_desc").value.trim(); if(!desc){ alert("กรอกรายการก่อน"); return; }
+  S.repairs.push({id:uid(),date:$("rp_date").value||todayStr(),room:$("rp_room").value,desc,cost:num($("rp_cost").value)});
+  $("rp_desc").value=""; $("rp_cost").value=0; save(); renderRepairs(); renderSummary();
+}
+function delRepair(id){ if(confirm("ลบรายการนี้?")){ S.repairs=S.repairs.filter(r=>r.id!==id); save(); renderRepairs(); renderSummary(); } }
+
+/* ---------- สรุปรายได้ ---------- */
+function renderSummary(){
+  const list=S.hist.filter(h=>h.month===curHM);
+  const sum=k=>list.reduce((s,h)=>s+num(h[k]),0);
+  const total=sum("total"), lateAll=list.filter(h=>h.paid).reduce((s,h)=>s+num(h.late),0);
+  const got=list.filter(h=>h.paid).reduce((s,h)=>s+num(h.total)+num(h.late),0);
+  const exp=S.repairs.filter(r=>String(r.date).startsWith(curHM)&&!r.income).reduce((s,r)=>s+num(r.cost),0);
+  const rooms=S.rooms.length, occ=occupied().length;
+  $("sumBox").innerHTML = list.length ? `
+    <div class="stat"><span>ค่าห้อง</span><b>${fmt(sum("rent"))}</b></div>
+    <div class="stat"><span>ค่าไฟ</span><b>${fmt(sum("ea"))}</b></div>
+    <div class="stat"><span>ค่าน้ำ</span><b>${fmt(sum("wa"))}</b></div>
+    <div class="stat"><span>ค่าอื่นๆ</span><b>${fmt(sum("other"))}</b></div>
+    <div class="stat"><span><b>รวมที่เรียกเก็บ</b></span><b>${fmt(total)}</b></div>
+    <div class="stat"><span class="paid">รับเงินแล้ว (${list.filter(h=>h.paid).length}/${list.length} บิล)</span><b class="paid">${fmt(got)}</b></div>
+    <div class="stat"><span>ในนี้เป็นค่าปรับจ่ายช้า</span><b>${fmt(lateAll)}</b></div>
+    <div class="stat"><span class="unpaid">ยังค้าง</span><b class="unpaid">${fmt(list.filter(h=>!h.paid).reduce((s,h)=>s+owed(h),0))}</b></div>
+    <div class="stat"><span>ค่าซ่อม/ค่าใช้จ่าย</span><b>− ${fmt(exp)}</b></div>
+    <div class="stat"><span><b>คงเหลือสุทธิ (รับแล้ว − ค่าใช้จ่าย)</b></span><b>${fmt(got-exp)}</b></div>
+    <div class="stat"><span>อัตราเข้าพักปัจจุบัน</span><b>${rooms?`${occ}/${rooms} ห้อง (${Math.round(occ/rooms*100)}%)`:"-"}</b></div>` : '<p class="hint">ยังไม่มีข้อมูล ปิดเดือนอย่างน้อย 1 ครั้งก่อน</p>';
+  const ms=months().slice(0,6).reverse();
+  const tot=ms.map(m=>S.hist.filter(h=>h.month===m).reduce((s,h)=>s+num(h.total),0));
+  const mx=Math.max(1,...tot);
+  $("trend").innerHTML = ms.map((m,i)=>`<div style="margin-bottom:8px"><div class="stat" style="border:0"><span>${thMonth(m)}</span><b>${fmt(tot[i])}</b></div><div class="bar" style="width:${Math.round(tot[i]/mx*100)}%"></div></div>`).join("") || '<p class="hint">ยังไม่มีข้อมูล</p>';
+}
+
+/* ---------- ตั้งค่า / สำรองข้อมูล ---------- */
+function bindSettings(){
+  ["dorm","addr","er","wr","wmin","dueDay","lateFee","warn","note","pp","ppName"].forEach(k=>{
+    $(k).value=S.cfg[k];
+    $(k).oninput=()=>{ S.cfg[k]=$(k).value; save(); if(k==="dorm") $("hdrName").textContent=S.cfg.dorm; renderRooms(); };
+  });
+  $("hdrName").textContent=S.cfg.dorm;
+}
+function exportData(){
+  const blob=new Blob([JSON.stringify(S,null,1)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=`สำรองข้อมูล-${S.cfg.dorm}-${todayStr()}.json`; a.click();
+}
+function importData(inp){
+  const f=inp.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{ try{
+    const x=JSON.parse(rd.result);
+    if(!x.cfg || !Array.isArray(x.rooms) || !Array.isArray(x.hist)) throw 0;
+    if(!confirm("นำเข้าไฟล์นี้? ข้อมูลปัจจุบันในเครื่องจะถูกแทนที่")) return;
+    S={ cfg:Object.assign(S.cfg,x.cfg), rooms:x.rooms, hist:x.hist, repairs:x.repairs||[], moves:x.moves||[], seq:x.seq||0 };
+    save(); bindSettings(); renderRooms(); renderTop(); fillMonths(); alert("นำเข้าข้อมูลแล้ว");
+  }catch(e){ alert("ไฟล์ไม่ถูกต้อง"); } };
+  rd.readAsText(f); inp.value="";
+}
+function wipe(){
+  if(confirm("ลบข้อมูลทั้งหมด? กู้คืนไม่ได้ (ควรดาวน์โหลดไฟล์สำรองก่อน)") && confirm("ยืนยันอีกครั้ง ลบจริงๆ?")){
+    localStorage.removeItem(KEY); localStorage.removeItem(OLD); location.reload();
+  }
+}
+
+/* ---------- เริ่มต้น ---------- */
+load();
+$("month").value=monthStr(); $("rpm").value=monthStr(); $("rp_date").value=todayStr();
+bindSettings(); setView(view); renderTop(); fillMonths();
+</script>
+</body>
+</html>
