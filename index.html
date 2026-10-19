@@ -2618,7 +2618,7 @@ function exportTenants(){
 }
 
 /* ================= ออนไลน์ (Firebase) ================= */
-const FB_EMBED = null; /* ใส่ config ตรงนี้ได้ เช่น {apiKey:"...",authDomain:"...",projectId:"...",appId:"..."} จะได้ไม่ต้องวางทุกเครื่อง */
+const FB_EMBED = {"apiKey": "AIzaSyCngsM4KNKj-6fB13LVn9kzbWiePVOSEDI", "authDomain": "front-1b98a.firebaseapp.com", "projectId": "front-1b98a", "storageBucket": "front-1b98a.firebasestorage.app", "messagingSenderId": "797318273891", "appId": "1:797318273891:web:5c57e23dd1dce39fe39156"}; /* ใส่ config ตรงนี้ได้ เช่น {apiKey:"...",authDomain:"...",projectId:"...",appId:"..."} จะได้ไม่ต้องวางทุกเครื่อง */
 let FBC = FB_EMBED; try{ if(!FBC) FBC = JSON.parse(localStorage.getItem("dormFbCfg")||"null"); }catch(e){}
 const cloud = { on:false, db:null, auth:null, ready:false, pushed:{}, timer:null, unsub:null, dev:Math.random().toString(36).slice(2,8) };
 function setSync(t){ const e=$("syncSt"); if(e) e.textContent=t; const s=$("fbState"); if(s) s.textContent=t; }
