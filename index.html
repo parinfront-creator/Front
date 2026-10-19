@@ -1422,6 +1422,51 @@ window.QRCode.CorrectLevel={L:1,M:0,Q:3,H:2};
     #print { display:block; }
     .bill:last-child { page-break-after:auto; }
   }
+  /* ===== ธีมสี + โหมดมืด/สว่าง (เพิ่มใหม่ — ใช้เฉพาะบนหน้าจอ ไม่กระทบการพิมพ์) ===== */
+  @media screen {
+    :root { --ac:#1f7a4d; --ac2:#17613d; --acl:#e8f4ee; --act:#1f7a4d; }
+    header, #lock, #login { background:var(--ac) !important; }
+    header button.sm { background:var(--ac2) !important; }
+    main button:not(.gray):not(.red):not(.blue):not(.amber):not(.sw),
+    .mbox button:not(.gray):not(.red):not(.blue):not(.amber):not(.sw) { background:var(--ac); }
+    #lock button, #login button { color:var(--ac) !important; }
+    #lock a, #login a { color:#fff !important; opacity:.85; }
+    nav button.on { color:var(--act) !important; border-color:var(--act) !important; }
+    .sum, .paid, details summary { color:var(--act); }
+    .bar, .prog i { background:var(--ac); }
+    .occ { background:var(--acl); }
+    .tbl th { background:var(--acl); }
+    h2[style*="e8f4ee"] { background:var(--acl) !important; }
+    .sw { width:40px; height:40px; padding:0; border-radius:50%; border:3px solid transparent; flex:none; }
+    .sw.on { border-color:#222; box-shadow:0 0 0 2px #fff inset; }
+    #themeBox .swrow { display:flex; gap:10px; flex-wrap:wrap; margin:8px 0; }
+
+    body[data-mode="dark"] { background:#12161a; color:#e6e8ea; color-scheme:dark; }
+    body[data-mode="dark"] .sw.on { border-color:#fff; box-shadow:0 0 0 2px #000 inset; }
+    body[data-mode="dark"] .card, body[data-mode="dark"] .mbox, body[data-mode="dark"] nav { background:#1e242a; }
+    body[data-mode="dark"] input, body[data-mode="dark"] select, body[data-mode="dark"] textarea { background:#2a3138; color:#eee; border-color:#4a545c; }
+    body[data-mode="dark"] input:disabled { background:#222; color:#888; }
+    body[data-mode="dark"] label { color:#aab2b8; }
+    body[data-mode="dark"] label.chk { color:#ddd; }
+    body[data-mode="dark"] .hint { color:#98a1a8; }
+    body[data-mode="dark"] .room { background:#252c33; border-color:#3a444c; }
+    body[data-mode="dark"] .room.vac { background:#1a1f24; }
+    body[data-mode="dark"] .hrow, body[data-mode="dark"] .step { border-color:#333c44; }
+    body[data-mode="dark"] .stat { border-color:#3a444c; }
+    body[data-mode="dark"] .alert { background:#3a2e18; color:#f0e0c0; }
+    body[data-mode="dark"] .occ { background:#23312b; }
+    body[data-mode="dark"] .tbl th { background:#2a3a33; }
+    body[data-mode="dark"] .tbl th, body[data-mode="dark"] .tbl td { border-color:#444e56; }
+    body[data-mode="dark"] .prog { background:#333c44; }
+    body[data-mode="dark"] nav button { color:#aab2b8; }
+    body[data-mode="dark"] .bkrow { border-color:#333c44; }
+    body[data-mode="dark"] .bkrow input:disabled { background:#222; color:#888; }
+    body[data-mode="dark"] pre { background:#2a3138 !important; color:#ddd; }
+    body[data-mode="dark"] .unpaid { color:#ff8a80; }
+    body[data-mode="dark"] .warn { color:#ff8a80; }
+    body[data-mode="dark"] h2[style*="e8f4ee"] { background:#26332d !important; }
+    body[data-mode="dark"] .bill, body[data-mode="dark"] #snap { color:#000; }
+  }
 </style>
 </head>
 <body>
@@ -1463,6 +1508,7 @@ window.QRCode.CorrectLevel={L:1,M:0,Q:3,H:2};
       </div>
       <button class="full amber" onclick="openWalk()">📝 โหมดจดมิเตอร์ทีละห้อง</button>
       <button class="full gray" onclick="printMeterSheet()">🖨️ พิมพ์ใบจดมิเตอร์ (ถือเดินจดบนกระดาษ)</button>
+      <button class="full amber" onclick="openMeterPaste()">📋 วางเลขมิเตอร์จากกระดาษ/ข้อความ (ตรวจก่อนบันทึก)</button>
       <p class="hint">กรอกเฉพาะ "เลขมิเตอร์ล่าสุด ✏️" ระบบจำเลขเดือนก่อนให้เอง และเตือนถ้าตัวเลขผิดปกติ</p>
       <div class="g2" style="margin-top:10px">
         <div><label>🏢 เลือกชั้น</label><select id="fFloor" onchange="flt.floor=this.value;renderRooms()"></select></div>
@@ -1470,6 +1516,7 @@ window.QRCode.CorrectLevel={L:1,M:0,Q:3,H:2};
       </div>
       <div class="hint" id="fInfo" style="margin:6px 0"></div>
       <button class="full amber" onclick="openBulk()">📋 กรอกผู้เช่าหลายห้องพร้อมกัน (เลือกชั้นก่อนได้)</button>
+      <button class="full amber" onclick="openFloorRent()">💰 ตั้งค่าห้องทั้งชั้น (แก้ราคาพร้อมกัน)</button>
       <div id="rooms"></div>
       <button class="full blue" onclick="addRoom()">➕ เพิ่มห้อง</button>
       <button class="full blue" onclick="addRooms()">➕ เพิ่มหลายห้องพร้อมกัน</button>
@@ -1546,6 +1593,18 @@ window.QRCode.CorrectLevel={L:1,M:0,Q:3,H:2};
 
   <!-- 5: ตั้งค่า -->
   <section class="tab" id="t5">
+    <div class="card" id="themeBox">
+      <h2>🎨 ธีมสี / โหมดหน้าจอ</h2>
+      <label>เลือกสีหลัก</label>
+      <div class="swrow" id="swRow"></div>
+      <label>โหมดหน้าจอ</label>
+      <select id="modeSel" onchange="setMode(this.value)">
+        <option value="light">☀️ สว่าง</option>
+        <option value="dark">🌙 มืด</option>
+        <option value="auto">🔄 ตามระบบเครื่อง</option>
+      </select>
+      <p class="hint">บันทึกไว้เฉพาะเครื่องนี้ · ไม่มีผลกับใบบิลที่พิมพ์/ส่งรูป</p>
+    </div>
     <div class="card">
       <h2>⚙️ ข้อมูลหอพัก</h2>
       <label>ชื่อหอพัก</label><input id="dorm">
@@ -1596,6 +1655,11 @@ service cloud.firestore {
     }
   }
 }</pre><p class="hint">ใส่อีเมลของผู้ที่อนุญาตให้ใช้เท่านั้น แล้วกด Publish</p></details>
+    </div>
+    <div class="card">
+      <h2>🕘 จุดกู้คืนอัตโนมัติ</h2>
+      <p class="hint">ระบบเก็บสำเนาข้อมูลให้เองก่อนทำสิ่งที่เสี่ยง (ปิดเดือน, นำเข้าไฟล์, ลบ, ยกเลิกปิดเดือน, ย้ายออก) เก็บ 6 ชุดล่าสุดในเครื่องนี้ ถ้าพลาด กด "กู้คืน" ได้เลย</p>
+      <div id="snapList"></div>
     </div>
     <div class="card">
       <h2>💾 สำรอง / นำเข้าข้อมูล</h2>
@@ -1788,7 +1852,7 @@ function renderTop(){
     else if(dl<=30) al.push(`ห้อง ${esc(r.no)} ${esc(r.tenant)}: สัญญาจะหมดใน ${dl} วัน (${thDateStr(r.end)})`);
   });
   const lb=S.cfg.lastBackup, bd=lb?Math.round((t0-pd(lb))/864e5):null;
-  if(S.rooms.length && (bd===null || bd>30)) al.unshift("💾 "+(bd===null?"ยังไม่เคยสำรองข้อมูล":"ไม่ได้สำรองข้อมูลมา "+bd+" วัน")+" — ไปที่แท็บ ตั้งค่า แล้วกด 'ดาวน์โหลดไฟล์สำรอง'");
+  if(S.rooms.length && (bd===null || bd>7)) al.unshift("💾 "+(bd===null?"ยังไม่เคยสำรองข้อมูล":"ไม่ได้สำรองข้อมูลมา "+bd+" วัน")+" — ไปที่แท็บ ตั้งค่า แล้วกด 'ดาวน์โหลดไฟล์สำรอง'");
   $("alerts").innerHTML = al.length ? `<div class="card"><h2>⏰ แจ้งเตือน</h2>${al.map(a=>`<div class="alert">${a}</div>`).join("")}</div>` : "";
 }
 
@@ -2065,6 +2129,8 @@ function closeMonth(){
   if(!all.length){ alert("ยังไม่มีห้องที่มีผู้เช่า"); return; }
   const occ=all.filter(r=>!S.hist.some(h=>h.month===month && h.room===r.no && !h.final));
   if(!occ.length){ alert("เดือน "+thMonth(month)+" ปิดไปแล้ว\n(ถ้าปิดซ้ำ ตัวเลขจะผิด) ถ้าจะทำเดือนต่อไป ให้เปลี่ยนช่องเลือกเดือนด้านบนก่อน"); return; }
+  const miss=occ.filter(r=>!isRead(r));
+  if(miss.length && !confirm(`ยังไม่ได้จดมิเตอร์ ${miss.length} ห้อง (${miss.slice(0,8).map(r=>r.no).join(", ")}${miss.length>8?" ...":""})\nยังจะปิดเดือนไหม?`)) return;
   if(occ.some(r=>calc(r).errE||calc(r).errW) && !confirm("มีห้องที่เลขมิเตอร์ผิดปกติ ยังจะปิดเดือนไหม?")) return;
   if(!confirm(`ปิดเดือน ${thMonth(month)}?\nบิลจะถูกบันทึกประวัติ และเลขล่าสุดจะกลายเป็นเลขก่อนหน้า`)) return;
   occ.forEach(r=>{
@@ -2716,6 +2782,164 @@ function cloudInit(){
     else{ if(cloud.unsub){ cloud.unsub(); cloud.unsub=null; } cloud.ready=false; cloud.pushed={}; $("login").style.display="block"; setSync("🔒 ยังไม่ได้เข้าสู่ระบบ"); }
   });
 }
+
+/* ================= ธีมสี / มืด-สว่าง ================= */
+const THEMES = {
+  green :{n:"เขียว",  ac:"#1f7a4d", ac2:"#17613d", acl:"#e8f4ee", act:"#1f7a4d", actD:"#5ccf94"},
+  sky   :{n:"ฟ้าอ่อน", ac:"#0284c7", ac2:"#036ca3", acl:"#e0f2fe", act:"#0284c7", actD:"#38bdf8"},
+  pink  :{n:"ชมพู",   ac:"#db2777", ac2:"#b01e60", acl:"#fce7f3", act:"#db2777", actD:"#f472b6"},
+  purple:{n:"ม่วง",   ac:"#7c3aed", ac2:"#5b21b6", acl:"#ede9fe", act:"#7c3aed", actD:"#a78bfa"},
+  orange:{n:"ส้ม",    ac:"#ea580c", ac2:"#c2410c", acl:"#ffedd5", act:"#ea580c", actD:"#fb923c"},
+  red   :{n:"แดง",    ac:"#dc2626", ac2:"#b91c1c", acl:"#fee2e2", act:"#dc2626", actD:"#f87171"}
+};
+let thAccent="green", thMode="light";
+try{ thAccent=localStorage.getItem("dormAccent")||"green"; thMode=localStorage.getItem("dormMode")||"light"; }catch(e){}
+if(!THEMES[thAccent]) thAccent="green";
+if(!["light","dark","auto"].includes(thMode)) thMode="light";
+function isDarkNow(){
+  return thMode==="dark" || (thMode==="auto" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+}
+function applyTheme(){
+  const t=THEMES[thAccent], dark=isDarkNow(), root=document.documentElement.style;
+  root.setProperty("--ac",t.ac); root.setProperty("--ac2",t.ac2);
+  root.setProperty("--acl",t.acl); root.setProperty("--act",dark?t.actD:t.act);
+  document.body.setAttribute("data-mode",dark?"dark":"light");
+  const m=document.querySelector('meta[name="theme-color"]'); if(m) m.setAttribute("content",dark?"#12161a":t.ac);
+  const row=$("swRow");
+  if(row) row.innerHTML=Object.keys(THEMES).map(k=>`<button type="button" class="sw ${k===thAccent?"on":""}" title="${THEMES[k].n}" style="background:${THEMES[k].ac}" onclick="setAccent('${k}')"></button>`).join("");
+  const ms=$("modeSel"); if(ms) ms.value=thMode;
+}
+function setAccent(k){ if(!THEMES[k]) return; thAccent=k; try{ localStorage.setItem("dormAccent",k); }catch(e){} applyTheme(); }
+function setMode(v){ thMode=v; try{ localStorage.setItem("dormMode",v); }catch(e){} applyTheme(); }
+try{ if(window.matchMedia){ const mq=window.matchMedia("(prefers-color-scheme: dark)"); const f=()=>{ if(thMode==="auto") applyTheme(); }; mq.addEventListener ? mq.addEventListener("change",f) : mq.addListener && mq.addListener(f); } }catch(e){}
+applyTheme();
+
+/* ================= ตั้งค่าห้องทั้งชั้น ================= */
+let frFloors=[], frBy={};
+function frCommon(ids){
+  const cnt={}; ids.forEach(i=>{ const k=num(S.rooms[i].rent); cnt[k]=(cnt[k]||0)+1; });
+  return +Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]||a-b)[0];
+}
+function openFloorRent(){
+  frBy={}; S.rooms.forEach((r,i)=>{ const f=fl(i); (frBy[f]=frBy[f]||[]).push(i); });
+  frFloors=Object.keys(frBy).sort((a,b)=>(+a||0)-(+b||0));
+  if(!frFloors.length){ alert("ยังไม่มีห้อง"); return; }
+  const p=n=>fmt(n).replace(".00","");
+  const rows=frFloors.map((f,k)=>{
+    const ids=frBy[f], common=frCommon(ids);
+    const odd=ids.filter(i=>num(S.rooms[i].rent)!==common).map(i=>`${esc(S.rooms[i].no)} (${p(S.rooms[i].rent)})`);
+    return `<div class="room"><div class="top"><b>ชั้น ${esc(f)}</b><span class="hint">${ids.length} ห้อง · ราคาส่วนใหญ่ ${p(common)}</span></div>
+      <label>ค่าห้องใหม่ของชั้นนี้ (เว้นว่าง = ไม่แก้ชั้นนี้)</label>
+      <input id="fr_${k}" type="number" inputmode="decimal" placeholder="${common}">
+      ${odd.length?`<div class="hint">ห้องที่ราคาต่างจากส่วนใหญ่: ${odd.join(", ")}</div>`:""}</div>`;
+  }).join("");
+  $("modal").innerHTML=`<div class="mbox"><h2>💰 ตั้งค่าห้องทั้งชั้น</h2>
+    <p class="hint">ใส่ราคาใหม่ของแต่ละชั้น ระบบแก้ทุกห้องในชั้นนั้นให้พร้อมกัน (รวมห้องว่าง) · มีผลกับบิลที่ยังไม่ปิดเดือนเท่านั้น บิลเก่าที่ปิดแล้วไม่เปลี่ยน</p>
+    <label class="chk"><input type="checkbox" id="fr_keep" checked> ไม่แก้ห้องราคาพิเศษ (ห้องที่ราคาต่างจากราคาส่วนใหญ่ของชั้น)</label>
+    ${rows}
+    <button class="full" onclick="frApply()">✅ บันทึกราคา</button>
+    <button class="full gray" onclick="moClose()">ปิด</button></div>`;
+  $("modal").classList.add("on");
+}
+function frApply(){
+  const keep=$("fr_keep").checked, plan=[];
+  frFloors.forEach((f,k)=>{
+    const v=$("fr_"+k).value; if(v==="") return;
+    const price=num(v), ids=frBy[f], common=frCommon(ids);
+    const target=ids.filter(i=>!keep || num(S.rooms[i].rent)===common);
+    plan.push({f,price,target,skipped:ids.length-target.length});
+  });
+  if(!plan.length){ alert("ยังไม่ได้ใส่ราคาชั้นไหนเลย"); return; }
+  const msg=plan.map(x=>`ชั้น ${x.f}: ${x.target.length} ห้อง → ${fmt(x.price).replace(".00","")} บาท${x.skipped?` (ข้ามห้องพิเศษ ${x.skipped})`:""}`).join("\n");
+  if(!confirm("ยืนยันแก้ค่าห้อง?\n"+msg)) return;
+  snapNow("ก่อนแก้ค่าห้องทั้งชั้น");
+  plan.forEach(x=>x.target.forEach(i=>{ S.rooms[i].rent=x.price; }));
+  save(); moClose(); renderRooms(); renderTop();
+  alert("แก้ค่าห้องเรียบร้อย");
+}
+
+/* ================= วางเลขมิเตอร์จากข้อความ ================= */
+let mpRows=[];
+function openMeterPaste(){
+  $("modal").innerHTML=`<div class="mbox"><h2>📋 วางเลขมิเตอร์ (จากกระดาษ/ข้อความ)</h2>
+    <p class="hint">1 ห้องต่อ 1 บรรทัด: เลขห้อง เลขไฟ เลขน้ำ (คั่นด้วยเว้นวรรคหรือจุลภาค) เช่น 101 1234 567 · ระบบจะแสดงตารางให้ตรวจก่อน ยังไม่บันทึกจนกว่าจะกดยืนยัน</p>
+    <textarea id="mp_t" rows="8" placeholder="101 1234 567&#10;102 2210 801"></textarea>
+    <button class="full blue" onclick="mpPreview()">🔍 ตรวจสอบก่อนบันทึก</button>
+    <div id="mp_res"></div>
+    <button class="full gray" onclick="moClose()">ปิด</button></div>`;
+  $("modal").classList.add("on"); mpRows=[];
+}
+function mpPreview(){
+  const lines=$("mp_t").value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  mpRows=[]; const bad=[];
+  lines.forEach(line=>{
+    const t=line.split(/[\s,|\t]+/).filter(Boolean);
+    const idx=S.rooms.findIndex(r=>String(r.no)===t[0]);
+    const e=t[1]!==undefined?Number(String(t[1]).replace(/,/g,"")):NaN, w=t[2]!==undefined?Number(String(t[2]).replace(/,/g,"")):NaN;
+    if(idx<0){ bad.push(`${esc(line)} → ไม่พบห้อง ${esc(t[0])}`); return; }
+    if(S.rooms[idx].vacant){ bad.push(`${esc(line)} → ห้อง ${esc(t[0])} เป็นห้องว่าง`); return; }
+    if(isNaN(e)||isNaN(w)){ bad.push(`${esc(line)} → ต้องมีเลขไฟและเลขน้ำ`); return; }
+    const r=S.rooms[idx], tmp=Object.assign({},r,{e1:e,w1:w}), c=calc(tmp);
+    mpRows.push({idx,e,w,c,warn:warnings(tmp)});
+  });
+  const rows=mpRows.map(x=>{ const r=S.rooms[x.idx]; return `<tr><td><b>${esc(r.no)}</b></td><td>${esc(r.e0)}→${x.e}<br><span class="hint">${x.c.eu} หน่วย</span></td><td>${esc(r.w0)}→${x.w}<br><span class="hint">${x.c.wu} หน่วย</span></td><td class="n">${fmt(x.c.total)}</td></tr>${x.warn.length?`<tr><td colspan="4" class="warn" style="text-align:left">${x.warn.join("<br>")}</td></tr>`:""}`; }).join("");
+  $("mp_res").innerHTML=(mpRows.length?`<div style="overflow-x:auto;margin-top:10px"><table class="tbl"><thead><tr><th>ห้อง</th><th>ไฟ</th><th>น้ำ</th><th>รวม (บาท)</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <button class="full" onclick="mpApply()">✅ ใช้ข้อมูลนี้ (${mpRows.length} ห้อง)</button>`:'<p class="hint">ไม่มีบรรทัดที่ใช้ได้</p>')
+    +(bad.length?`<div class="alert">ข้ามบรรทัดเหล่านี้:<br>${bad.join("<br>")}</div>`:"");
+}
+function mpApply(){
+  if(!mpRows.length) return;
+  snapNow("ก่อนวางเลขมิเตอร์");
+  mpRows.forEach(x=>{ const r=S.rooms[x.idx]; r.e1=String(x.e); r.w1=String(x.w); });
+  const n=mpRows.length; mpRows=[]; save(); moClose(); renderRooms(); renderTop();
+  alert("บันทึกเลขมิเตอร์ "+n+" ห้องแล้ว ตรวจเลขที่มีตัวหนังสือสีแดงเตือนอีกครั้ง");
+}
+
+/* ================= จุดกู้คืนอัตโนมัติ (กันข้อมูลหาย) ================= */
+const SNAPKEY="dormSnaps";
+function getSnaps(){ try{ return JSON.parse(localStorage.getItem(SNAPKEY)||"[]"); }catch(e){ return []; } }
+function snapNow(why){
+  try{
+    const json=JSON.stringify(Object.assign({},S,{cfg:Object.assign({},S.cfg,{logo:"",pin:""})}));
+    let list=getSnaps();
+    if(!(list.length && list[0].json===json)){
+      list.unshift({t:Date.now(),why:why||"",json});
+      list=list.slice(0,6);
+      while(list.length){ try{ localStorage.setItem(SNAPKEY,JSON.stringify(list)); break; }catch(e){ list.pop(); } }
+    }
+  }catch(e){}
+  renderSnaps();
+}
+function renderSnaps(){
+  const el=$("snapList"); if(!el) return;
+  const list=getSnaps();
+  el.innerHTML = list.map((s,i)=>{
+    let info=""; try{ const x=JSON.parse(s.json); info=`${(x.rooms||[]).length} ห้อง · ${(x.hist||[]).length} บิล`; }catch(e){}
+    const when=new Date(s.t).toLocaleString("th-TH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+    return `<div class="stat"><span>${when}<br><span class="hint">${esc(s.why)} · ${info}</span></span><button class="sm gray" onclick="restoreSnap(${i})">↩️ กู้คืน</button></div>`;
+  }).join("") || '<p class="hint">ยังไม่มีจุดกู้คืน (จะสร้างให้เองเมื่อมีการปิดเดือน/นำเข้า/ลบ)</p>';
+}
+function restoreSnap(i){
+  const s=getSnaps()[i]; if(!s) return;
+  if(!confirm("กู้คืนข้อมูลกลับไปเป็นชุดนี้?\nข้อมูลปัจจุบันจะถูกแทนที่ (ระบบเก็บสำเนาปัจจุบันไว้ให้ก่อน) และจะซิงก์ขึ้นคลาวด์ด้วย")) return;
+  try{
+    const x=JSON.parse(s.json);
+    if(!x.cfg || !Array.isArray(x.rooms) || !Array.isArray(x.hist)) throw 0;
+    snapNow("ก่อนกู้คืน");
+    const keepPin=S.cfg.pin, keepLogo=S.cfg.logo;
+    S={ cfg:Object.assign({},S.cfg,x.cfg,{pin:keepPin,logo:keepLogo}), rooms:x.rooms, hist:x.hist, repairs:x.repairs||[], moves:x.moves||[], seq:x.seq||0 };
+    save(); refreshAll(); renderSnaps(); alert("กู้คืนข้อมูลแล้ว");
+  }catch(e){ alert("กู้คืนไม่สำเร็จ"); }
+}
+/* ครอบฟังก์ชันเดิมที่เสี่ยง: ทำสำเนาให้ก่อน แล้วเรียกฟังก์ชันเดิมตามปกติ */
+(function(){
+  const labels={closeMonth:"ก่อนปิดเดือน",importData:"ก่อนนำเข้าไฟล์",resetWithBackup:"ก่อนรีเซ็ตด้วยไฟล์",wipe:"ก่อนลบทั้งหมด",undoClose:"ก่อนยกเลิกปิดเดือน",ebDel:"ก่อนลบบิล",delRoom:"ก่อนลบห้อง",moConfirm:"ก่อนย้ายออก"};
+  Object.keys(labels).forEach(n=>{
+    const f=window[n];
+    if(typeof f==="function") window[n]=function(){ snapNow(labels[n]); return f.apply(this,arguments); };
+  });
+})();
+renderSnaps();
 
 /* ---------- เริ่มต้น ---------- */
 load();
