@@ -1365,6 +1365,22 @@ window.QRCode.CorrectLevel={L:1,M:0,Q:3,H:2};
   .cl-tb tr.tt td { border-top:1px dashed #000 !important; border-bottom:1px dashed #000 !important; font-size:16px; }
   .cl-sg { display:flex; justify-content:space-between; margin-top:28px; font-size:13px; text-align:center; }
   @media print { .pg2 .cl-sg { margin-top:10px; } }
+
+  @page { size:A4 portrait; margin:10mm; }
+  @media print {
+    #print > .bill.cl { display:flex; flex-direction:column; height:274mm; padding:6mm 8mm; font-size:17px; line-height:1.7; overflow:hidden; page-break-after:always; }
+    #print > .bill.cl:last-child { page-break-after:auto; }
+    #print > .bill.cl .cl-n { font-size:28px; }
+    #print > .bill.cl .dt { font-size:26px; }
+    #print > .bill.cl .da, #print > .bill.cl .dr { font-size:14px; }
+    #print > .bill.cl .cl-i { font-size:17px; margin:22px 0 14px; line-height:1.9; }
+    #print > .bill.cl .cl-tb { font-size:17px; margin-top:6px; }
+    #print > .bill.cl .cl-tb td, #print > .bill.cl .cl-tb th { padding:8px 8px; }
+    #print > .bill.cl .cl-tb tr.tt td { font-size:20px; padding:12px 8px; }
+    #print > .bill.cl .foot { margin-top:22px; font-size:16px; }
+    #print > .bill.cl .qr img, #print > .bill.cl .qr canvas { width:150px !important; height:150px !important; }
+    #print > .bill.cl .cl-sg { margin-top:auto; padding-bottom:10mm; font-size:16px; }
+  }
   /* ใบบิล / ใบเสร็จ */
   #print { display:none; }
   #snap { position:fixed; left:-9999px; top:0; width:620px; background:#fff; }
@@ -1911,7 +1927,7 @@ function clDoc(b, rc){
   const d1=`01/${p2(mm)}/${yy+543}`, d2=`${p2(last)}/${p2(mm)}/${yy+543}`;
   const stamp=rc ? thDateStr(b.paidDate) : `${p2(issue.getDate())}/${p2(issue.getMonth()+1)}/${issue.getFullYear()+543} เวลา ${p2(issue.getHours())}:${p2(issue.getMinutes())}`;
   const qr = (!rc && C.pp && !b.paid) ? `<div class="qrbox"><div class="qr" data-amt="${net}"></div><div>สแกนจ่ายพร้อมเพย์<br><b>${fmt(net)} บาท</b>${C.ppName?`<br>${esc(C.ppName)}`:""}</div></div>` : "";
-  const meter=(no,name,o,n,u,rate,amt)=>`<tr><td class="no">${no}</td><td colspan="2">${name}<br>&nbsp;&nbsp;- มิเตอร์เก่า<br>&nbsp;&nbsp;- มิเตอร์ใหม่<br>&nbsp;&nbsp;- จำนวนหน่วยที่ใช้ (หน่วยละ ${fmt(rate)} บาท)</td>
+  const meter=(no,name,o,n,u,rate,amt)=>`<tr><td class="no">${no}</td><td colspan="2">${name}<br>&nbsp;&nbsp;- มิเตอร์เก่า<br>&nbsp;&nbsp;- มิเตอร์ใหม่<br>&nbsp;&nbsp;- จำนวนหน่วยที่ใช้</td>
     <td class="n"><br>${o}<br>${n}<br>${u}</td><td class="n"><br><br><br>${fmt(amt)}</td></tr>`;
   const title = rc ? "ใบเสร็จรับเงิน" : "ใบแจ้งหนี้";
   const docNo = rc ? (b.rc||"-") : invNo(b);
