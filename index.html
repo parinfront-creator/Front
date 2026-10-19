@@ -9,7 +9,7 @@
 <style>
   * { box-sizing: border-box; }
   body { font-family:"Sarabun","Noto Sans Thai",Tahoma,sans-serif; margin:0; background:#eef2f1; color:#222; }
-  header { background:#1f7a4d; color:#fff; padding:14px 16px; font-size:20px; font-weight:bold; position:sticky; top:0; z-index:5; }
+  header { background:#1f7a4d; color:#fff; padding:0 16px; height:56px; display:flex; align-items:center; font-size:20px; font-weight:bold; position:sticky; top:0; z-index:5; white-space:nowrap; overflow:hidden; }
   main { max-width:760px; margin:0 auto; padding:12px 12px 90px; }
   .card { background:#fff; border-radius:12px; padding:14px; margin-bottom:12px; box-shadow:0 1px 4px rgba(0,0,0,.1); }
   h2 { margin:0 0 8px; font-size:17px; }
@@ -55,16 +55,40 @@
   .tbl td.n { text-align:right; }
   .tbl input { padding:6px; font-size:15px; min-width:80px; }
   @media (min-width:900px) {
-    main { max-width:1100px; }
+    main { max-width:1100px; padding-top:70px; padding-bottom:30px; }
     .rgrid { display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
-    nav { justify-content:center; }
-    nav button { flex:0 1 150px; }
+    nav { position:fixed; top:56px; bottom:auto; justify-content:center; box-shadow:0 2px 6px rgba(0,0,0,.15); }
+    nav button { flex:0 1 160px; font-size:15px; padding:12px 4px; }
+    nav button br { display:none; }
+    nav button.on { border-top:0; border-bottom:3px solid #1f7a4d; }
+  }
+  /* กรอกผู้เช่าหลายห้อง */
+  .bkrow { display:grid; grid-template-columns:70px 1.7fr 1fr 1fr 1fr 1fr 1fr; gap:6px; align-items:center; padding:6px 0; border-bottom:1px solid #eee; }
+  .bkrow input { padding:8px; font-size:15px; }
+  .bkrow input:disabled { background:#f1f1f1; color:#777; }
+  .bkhead { font-size:12px; color:#666; font-weight:bold; border-bottom:2px solid #ccc; }
+  .bkrow label { display:none; }
+  @media (max-width:700px) {
+    .bkhead { display:none; }
+    .bkrow { grid-template-columns:1fr 1fr; background:#fafcfb; border:1px solid #d5ddda; border-radius:8px; padding:8px; margin-top:8px; }
+    .bkrow .no { grid-column:1/3; font-size:18px; }
+    .bkrow label { display:block; margin-top:0; }
   }
 
   /* ใบบิล / ใบเสร็จ */
   #print { display:none; }
   #snap { position:fixed; left:-9999px; top:0; width:620px; background:#fff; }
   .bill { padding:22px; font-size:15px; background:#fff; color:#000; page-break-after:always; }
+  .dh { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; border-bottom:3px solid #1f7a4d; padding-bottom:8px; margin-bottom:8px; }
+  .dl { display:flex; gap:10px; align-items:center; }
+  .dl img { max-height:56px; max-width:90px; }
+  .dn { font-size:20px; font-weight:bold; } .da { color:#555; font-size:12px; }
+  .dr { text-align:right; font-size:13px; } .dt { font-size:18px; font-weight:bold; color:#1f7a4d; }
+  .bill .info { display:grid; grid-template-columns:.6fr 1.7fr 1.1fr 1.3fr; gap:6px 14px; background:#f6faf8; border:1px solid #d5e5dc; border-radius:6px; padding:8px 10px; }
+  .bill .info span { color:#666; font-size:12px; display:block; }
+  .bill .info .due b { color:#c0392b; }
+  .paidtag { display:inline-block; border:2px solid #1f7a4d; color:#1f7a4d; padding:0 8px; border-radius:4px; font-weight:bold; margin-top:4px; }
+  .fine { text-align:center; color:#888; font-size:11px; margin-top:8px; }
   .bill h1 { text-align:center; margin:0; font-size:22px; }
   .bill .c { text-align:center; color:#555; }
   .bill table { width:100%; border-collapse:collapse; margin-top:10px; }
@@ -80,9 +104,10 @@
     .pg2 { page-break-after:always; }
     .pg2:last-child { page-break-after:auto; }
     .pg2 .bill { page-break-after:auto; padding:10px 16px; font-size:12.5px; height:48.5%; border-bottom:1px dashed #999; overflow:hidden; }
+    .pg2 .dn { font-size:16px; } .pg2 .dt { font-size:15px; } .pg2 .info { padding:5px 8px; gap:3px 12px; } .pg2 .fine { margin-top:4px; }
     .pg2 .bill h1 { font-size:18px; } .pg2 .bill h2 { font-size:14px; margin:4px 0 !important; }
     .pg2 .bill th, .pg2 .bill td { padding:3px 6px; }
-    .pg2 .sign { margin-top:18px; }
+    .pg2 .sign { margin-top:12px; } .pg2 .bill p { margin:3px 0; } .pg2 .dh { padding-bottom:5px; margin-bottom:5px; } .pg2 .foot { margin-top:6px; }
     .pg2 .qr img, .pg2 .qr canvas { width:96px !important; height:96px !important; }
     .pg2 .qrbox { min-width:110px; font-size:11px; }
     body { background:#fff; }
@@ -122,6 +147,7 @@
         <div><label>🔎 ค้นหาห้อง / ชื่อผู้เช่า</label><input id="fQ" placeholder="เช่น 203 หรือ สมชาย" oninput="flt.q=this.value;renderRooms()"></div>
       </div>
       <div class="hint" id="fInfo" style="margin:6px 0"></div>
+      <button class="full amber" onclick="openBulk()">📋 กรอกผู้เช่าหลายห้องพร้อมกัน (เลือกชั้นก่อนได้)</button>
       <div id="rooms"></div>
       <button class="full blue" onclick="addRoom()">➕ เพิ่มห้อง</button>
       <button class="full blue" onclick="addRooms()">➕ เพิ่มหลายห้องพร้อมกัน</button>
@@ -371,7 +397,7 @@ function buildFloors(){
     if(!S.rooms.some(r=>r.no===no)){ const r=newRoom(no,rent); r.vacant=true; S.rooms.push(r); added++; }
   }
   save(); renderRooms(); renderTop();
-  alert("สร้างห้องใหม่ "+added+" ห้อง (ตั้งเป็นห้องว่างไว้ก่อน) กดปุ่ม 🔑 ย้ายเข้า ที่ห้องที่มีคนอยู่ได้เลย");
+  alert("สร้างห้องใหม่ "+added+" ห้อง (ตั้งเป็นห้องว่างไว้ก่อน)\nต่อไป: เลือกชั้นที่ช่อง 🏢 แล้วกด '📋 กรอกผู้เช่าหลายห้องพร้อมกัน'");
 }
 const occupied = () => S.rooms.filter(r=>!r.vacant);
 const newRoom = (no,rent) => ({no,tenant:"",phone:"",line:"",plate:"",start:"",end:"",deposit:0,rent:rent||3000,e0:0,e1:0,w0:0,w1:0,other:0,lastEu:0,lastWu:0,vacant:false});
@@ -494,7 +520,7 @@ function renderRooms(){
       </div>
     </div>`;
     })();
-  }).join("") || '<p class="hint">ไม่พบห้อง (ลองเปลี่ยนชั้นหรือล้างช่องค้นหา)</p>') + '</div>';
+  }).join("") || (S.rooms.length ? '<p class="hint">ไม่พบห้อง (ลองเปลี่ยนชั้นหรือล้างช่องค้นหา)</p>' : '<div class="alert">👋 เริ่มต้นใช้งาน: 1) แท็บ ⚙️ตั้งค่า ใส่ชื่อหอ/ค่าไฟ/ค่าน้ำ/พร้อมเพย์ → 2) กด "🏢 สร้างห้องทั้งตึกตามชั้น" ด้านล่าง → 3) กด "📋 กรอกผู้เช่าหลายห้อง" ทีละชั้น</div>')) + '</div>';
 }
 function upd(i,k,v){
   S.rooms[i][k]=v; save();
@@ -515,9 +541,10 @@ function addRooms(){
 function delRoom(i){ if(confirm("ลบห้องนี้? (ประวัติบิลเก่ายังอยู่)")){ S.rooms.splice(i,1); save(); renderRooms(); renderTop(); } }
 
 /* ---------- ใบบิล / ใบเสร็จ ---------- */
-function docHead(title){
+function docHead(title, meta){
   const C=S.cfg;
-  return `${C.logo?`<img src="${C.logo}" style="display:block;margin:0 auto 6px;max-height:70px;max-width:220px">`:""}<h1>${esc(C.dorm)}</h1><div class="c">${esc(C.addr)}</div>${C.taxId?`<div class="c">เลขประจำตัวผู้เสียภาษี ${esc(C.taxId)}</div>`:""}<h2 class="c" style="margin:8px 0">${title}</h2>`;
+  return `<div class="dh"><div class="dl">${C.logo?`<img src="${C.logo}">`:""}<div><div class="dn">${esc(C.dorm)}</div><div class="da">${esc(C.addr)}</div>${C.taxId?`<div class="da">เลขประจำตัวผู้เสียภาษี ${esc(C.taxId)}</div>`:""}</div></div>
+    <div class="dr"><div class="dt">${title}</div>${meta||""}</div></div>`;
 }
 function itemRows(b, late){
   let h=`<tr><td>ค่าเช่าห้อง</td><td></td><td></td><td></td><td></td><td class="n">${fmt(b.rent)}</td></tr>
@@ -532,16 +559,15 @@ function whtRows(b,grand){
   return `<tr><td colspan="5" class="n">หัก ภาษี ณ ที่จ่าย 5% (ค่าเช่า)</td><td class="n">- ${fmt(w)}</td></tr>
       <tr class="t"><td colspan="5" class="n">ยอดโอนสุทธิ</td><td class="n">${fmt(grand-w)}</td></tr>`;
 }
-const tenantBlock = b => (b.tAddr?`<div style="grid-column:1/3">ที่อยู่ผู้เช่า: ${esc(b.tAddr)}</div>`:"")+(b.tTax?`<div style="grid-column:1/3">เลขประจำตัวผู้เสียภาษี: ${esc(b.tTax)}</div>`:"");
+const tenantBlock = b => (b.tAddr?`<div style="grid-column:1/-1">ที่อยู่ผู้เช่า: ${esc(b.tAddr)}</div>`:"")+(b.tTax?`<div style="grid-column:1/-1">เลขประจำตัวผู้เสียภาษี: ${esc(b.tTax)}</div>`:"");
 function billHTML(b){
   const C=S.cfg, issue=new Date(), due=dueDate(b.month);
   const late=b.pre?0:(b.paid?num(b.late):lateNow(b)), grand=num(b.total)+late, net=grand-num(b.wht);
   const qr = (C.pp && !b.paid) ? `<div class="qrbox"><div class="qr" data-amt="${net}"></div><div>สแกนจ่ายพร้อมเพย์<br><b>${fmt(net)} บาท</b>${C.ppName?`<br>${esc(C.ppName)}`:""}</div></div>` : "";
-  return `<div class="bill">${docHead("ใบแจ้งหนี้ค่าเช่าห้องพัก")}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px">
-      <div>วันที่: <b>${thDate(issue)}</b></div><div>ห้อง: <b>${esc(b.room)}</b></div>
-      <div>ผู้เช่า: <b>${esc(b.tenant)||"-"}</b></div><div>ประจำเดือน: <b>${thMonth(b.month)}</b></div>
-      <div>ครบกำหนดชำระ: <b>${thDate(due)}</b></div><div>เลขที่: <b>${invNo(b)}</b></div>${tenantBlock(b)}
+  return `<div class="bill">${docHead("ใบแจ้งหนี้ค่าเช่าห้องพัก",`<div>เลขที่ <b>${invNo(b)}</b></div><div>วันที่ออก <b>${thDate(issue)}</b></div>`)}
+    <div class="info">
+      <div><span>ห้อง</span><b>${esc(b.room)}</b></div><div><span>ผู้เช่า</span><b>${esc(b.tenant)||"-"}</b></div>
+      <div><span>ประจำเดือน</span><b>${thMonth(b.month)}</b></div><div class="due"><span>ครบกำหนดชำระ</span><b>${thDate(due)}</b></div>${tenantBlock(b)}
     </div>
     <table>
       <tr><th>รายการ</th><th class="n">เลขก่อน</th><th class="n">เลขหลัง</th><th class="n">หน่วย</th><th class="n">อัตรา</th><th class="n">บาท</th></tr>
@@ -550,19 +576,21 @@ function billHTML(b){
       ${whtRows(b,grand)}
     </table>
     <div class="foot">
-      <div>(${bahtText(grand)})${C.note?`<p>หมายเหตุ: ${esc(C.note)}</p>`:""}</div>
+      <div>ยอดที่ต้องชำระ: <b>(${bahtText(net)})</b>
+        ${num(C.lateFee)>0?`<div class="hint">ชำระหลังวันครบกำหนด คิดค่าปรับวันละ ${fmt(C.lateFee)} บาท</div>`:""}
+        ${C.note?`<div style="margin-top:4px">หมายเหตุ: ${esc(C.note)}</div>`:""}</div>
       ${qr}
     </div>
     <div class="sign"><div>ผู้เช่า</div><div>ผู้รับเงิน / เจ้าของหอ</div></div>
+    <div class="fine">ขอบคุณที่ใช้บริการ ${esc(C.dorm)}</div>
   </div>`;
 }
 function receiptHTML(h){
   const late=num(h.late), grand=num(h.total)+late;
-  return `<div class="bill">${docHead("ใบเสร็จรับเงิน")}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px">
-      <div>เลขที่: <b>${esc(h.rc||"-")}</b></div><div>วันที่รับเงิน: <b>${thDateStr(h.paidDate)}</b></div>
-      <div>ห้อง: <b>${esc(h.room)}</b></div><div>ได้รับเงินจาก: <b>${esc(h.tenant)||"-"}</b></div>
-      <div style="grid-column:1/3">เป็นค่าเช่าและค่าบริการประจำเดือน: <b>${thMonth(h.month)}</b> · อ้างอิงใบแจ้งหนี้ ${invNo(h)}</div>${tenantBlock(h)}
+  return `<div class="bill">${docHead("ใบเสร็จรับเงิน",`<div>เลขที่ <b>${esc(h.rc||"-")}</b></div><div>วันที่รับเงิน <b>${thDateStr(h.paidDate)}</b></div><div class="paidtag">✔ ชำระแล้ว</div>`)}
+    <div class="info">
+      <div><span>ห้อง</span><b>${esc(h.room)}</b></div><div><span>ได้รับเงินจาก</span><b>${esc(h.tenant)||"-"}</b></div>
+      <div><span>ค่าเช่าและค่าบริการประจำเดือน</span><b>${thMonth(h.month)}</b></div><div><span>อ้างอิงใบแจ้งหนี้</span><b>${invNo(h)}</b></div>${tenantBlock(h)}
     </div>
     <table>
       <tr><th>รายการ</th><th class="n">เลขก่อน</th><th class="n">เลขหลัง</th><th class="n">หน่วย</th><th class="n">อัตรา</th><th class="n">บาท</th></tr>
@@ -570,10 +598,11 @@ function receiptHTML(h){
       <tr class="t"><td colspan="5" class="n">${num(h.wht)?"รวมค่าเช่าและค่าบริการ":"รวมที่ได้รับ"}</td><td class="n">${fmt(grand)}</td></tr>
       ${whtRows(h,grand).replace("ยอดโอนสุทธิ","รวมที่ได้รับจริง")}
     </table>
-    <p>(${bahtText(grand-num(h.wht))})</p>
+    <p>จำนวนเงิน <b>(${bahtText(grand-num(h.wht))})</b></p>
     ${num(h.wht)?`<p class="hint">ผู้เช่าจะออกหนังสือรับรองการหักภาษี ณ ที่จ่ายให้ภายหลัง</p>`:""}
     ${h.note?`<p>หมายเหตุ: ${esc(h.note)}</p>`:""}
     <div class="sign"><div>ผู้จ่ายเงิน</div><div>ผู้รับเงิน / เจ้าของหอ</div></div>
+    <div class="fine">ขอบคุณที่ใช้บริการ ${esc(S.cfg.dorm)} · เอกสารนี้ไม่ใช่ใบกำกับภาษี</div>
   </div>`;
 }
 function printDocs(list){
@@ -817,6 +846,74 @@ function moConfirm(){
   Object.assign(r,{tenant:"",phone:"",line:"",plate:"",start:"",end:"",deposit:0,vacant:true,e0:v.e1,e1:v.e1,w0:v.w1,w1:v.w1,other:0,lastEu:0,lastWu:0});
   save(); moClose(); renderRooms(); renderTop(); fillMonths();
   alert("ย้ายออกเรียบร้อย ห้อง "+r.no+" ตั้งเป็นห้องว่างแล้ว");
+}
+
+/* ---------- กรอกผู้เช่าหลายห้อง ---------- */
+function applyTenant(r,d){
+  const was=!!r.vacant;
+  r.tenant=d.name;
+  if(d.phone!=null && d.phone!=="") r.phone=d.phone;
+  if(num(d.rent)) r.rent=num(d.rent);
+  if(d.dep!=null && d.dep!=="") r.deposit=num(d.dep);
+  if(was){
+    r.vacant=false; r.start=r.start||todayStr();
+    const e=(d.e===""||d.e==null)?num(r.e1):num(d.e), w=(d.w===""||d.w==null)?num(r.w1):num(d.w);
+    r.e0=e; r.e1=e; r.w0=w; r.w1=w; r.other=0; r.lastEu=0; r.lastWu=0; r.eOld=0; r.wOld=0;
+  }
+}
+let bkIds=[];
+function openBulk(){
+  bkIds=roomOrder();
+  if(!bkIds.length){ alert("ยังไม่มีห้อง กดปุ่ม 🏢 สร้างห้องทั้งตึกตามชั้น ก่อน"); return; }
+  const c=(i,k,lab,val,type,dis)=>`<div><label>${lab}</label><input id="bk_${k}_${i}" type="${type||"text"}" inputmode="${type==="number"?"decimal":"text"}" value="${esc(val)}" ${dis?"disabled":""}></div>`;
+  const rows=bkIds.map(i=>{ const r=S.rooms[i], occ=!r.vacant;
+    return `<div class="bkrow"><b class="no">${esc(r.no)}${occ?' <span class="tag">มีผู้เช่า</span>':""}</b>
+      ${c(i,"name","ชื่อผู้เช่า",occ?r.tenant:"")}${c(i,"phone","เบอร์โทร",occ?r.phone:"","tel")}
+      ${c(i,"rent","ค่าห้อง",r.rent,"number")}${c(i,"dep","เงินประกัน",occ?r.deposit:"","number")}
+      ${c(i,"e","เลขไฟวันเข้า",r.e1,"number",occ)}${c(i,"w","เลขน้ำวันเข้า",r.w1,"number",occ)}</div>`; }).join("");
+  $("modal").innerHTML=`<div class="mbox" style="max-width:1000px">
+    <h2>📋 กรอกข้อมูลผู้เช่า (${bkIds.length} ห้อง${flt.floor!=="all"?" · ชั้น "+flt.floor:""})</h2>
+    <p class="hint">กรอกเฉพาะห้องที่มีคนอยู่ ห้องที่ไม่ใส่ชื่อจะยังเป็นห้องว่าง · ห้องที่มีผู้เช่าแล้วแก้ชื่อ/เบอร์/ค่าห้อง/ประกันได้ (เลขมิเตอร์ไม่แตะ)</p>
+    <div class="g2"><div><label>ค่าห้องเท่ากันทุกห้องที่แสดง</label><input id="bk_all" type="number" inputmode="decimal" placeholder="เช่น 3500"></div>
+      <div style="align-self:end"><button class="full sm" onclick="bkAllRent()">ใช้ค่าห้องนี้</button></div></div>
+    <details><summary>📎 วางข้อมูลจาก Excel / Google Sheets</summary>
+      <p class="hint">เรียงคอลัมน์: ห้อง | ชื่อ | เบอร์โทร | ค่าห้อง | เงินประกัน | เลขมิเตอร์ไฟ | เลขมิเตอร์น้ำ (ก๊อปหลายแถวมาวางได้เลย)</p>
+      <textarea id="bk_paste" rows="5" placeholder="101\tสมชาย ใจดี\t0812345678\t3500\t7000\t1200\t310"></textarea>
+      <button class="full blue" onclick="bkPaste()">นำเข้าข้อมูลที่วาง</button></details>
+    <div class="bkrow bkhead"><span>ห้อง</span><span>ชื่อผู้เช่า</span><span>เบอร์โทร</span><span>ค่าห้อง</span><span>เงินประกัน</span><span>เลขไฟ</span><span>เลขน้ำ</span></div>
+    ${rows}
+    <button class="full" onclick="bkSave()">✅ บันทึกทั้งหมด</button>
+    <button class="full gray" onclick="moClose()">ปิด</button></div>`;
+  $("modal").classList.add("on");
+}
+function bkAllRent(){ const v=$("bk_all").value; if(v==="") return; bkIds.forEach(i=>{ $("bk_rent_"+i).value=v; }); }
+function bkSave(){
+  let n=0, ex=0;
+  bkIds.forEach(i=>{
+    const r=S.rooms[i], g=k=>$("bk_"+k+"_"+i).value, name=g("name").trim();
+    if(!name){ return; }
+    const occ=!r.vacant;
+    applyTenant(r,{name,phone:g("phone"),rent:g("rent"),dep:g("dep"),e:g("e"),w:g("w")});
+    occ?ex++:n++;
+  });
+  save(); moClose(); renderRooms(); renderTop();
+  alert(`บันทึกแล้ว: ย้ายเข้าใหม่ ${n} ห้อง · แก้ข้อมูล ${ex} ห้อง`);
+}
+function bkPaste(){
+  const t=$("bk_paste").value.trim(); if(!t){ alert("ยังไม่ได้วางข้อมูล"); return; }
+  let n=0, bad=0;
+  t.split(/\r?\n/).forEach(line=>{
+    if(!line.trim()) return;
+    const c=line.split(line.includes("\t")?"\t":",").map(x=>x.trim());
+    if(!/\d/.test(c[0]||"") || !c[1]){ bad++; return; }
+    let r=S.rooms.find(x=>String(x.no)===c[0]);
+    if(!r){ r=newRoom(c[0],S.rooms[0]?S.rooms[0].rent:3000); r.vacant=true; S.rooms.push(r); }
+    applyTenant(r,{name:c[1],phone:c[2],rent:(c[3]||"").replace(/,/g,""),dep:(c[4]||"").replace(/,/g,""),e:(c[5]||"").replace(/,/g,""),w:(c[6]||"").replace(/,/g,"")});
+    n++;
+  });
+  S.rooms.sort((a,b)=>String(a.no).localeCompare(String(b.no),"th",{numeric:true}));
+  save(); moClose(); renderRooms(); renderTop();
+  alert(`นำเข้า ${n} ห้อง${bad?` · ข้าม ${bad} แถวที่รูปแบบไม่ถูกต้อง (หัวตาราง/ไม่มีชื่อ)`:""}`);
 }
 
 /* ---------- ย้ายเข้า ---------- */
