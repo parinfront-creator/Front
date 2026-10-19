@@ -1467,6 +1467,23 @@ window.QRCode.CorrectLevel={L:1,M:0,Q:3,H:2};
     body[data-mode="dark"] h2[style*="e8f4ee"] { background:#26332d !important; }
     body[data-mode="dark"] .bill, body[data-mode="dark"] #snap { color:#000; }
   }
+  /* ===== พิมพ์: ซ่อนหัว/ท้ายกระดาษของเบราว์เซอร์ + ลดขนาดตัวอักษรบิลให้พอดี ===== */
+  @page { size:A4 portrait; margin:0; }
+  @media print {
+    #print { padding:8mm 10mm; box-sizing:border-box; }
+    #print > .bill.cl { font-size:14px; line-height:1.55; padding:4mm 6mm; }
+    #print > .bill.cl .cl-n { font-size:22px; }
+    #print > .bill.cl .cl-t { font-size:20px; }
+    #print > .bill.cl .dt { font-size:20px; }
+    #print > .bill.cl .da, #print > .bill.cl .dr { font-size:12px; }
+    #print > .bill.cl .cl-i { font-size:14px; margin:14px 0 10px; line-height:1.7; }
+    #print > .bill.cl .cl-tb { font-size:14px; margin-top:4px; }
+    #print > .bill.cl .cl-tb td, #print > .bill.cl .cl-tb th { padding:4px 6px; }
+    #print > .bill.cl .cl-tb tr.tt td { font-size:16px; padding:8px 6px; }
+    #print > .bill.cl .foot { margin-top:14px; font-size:13px; }
+    #print > .bill.cl .qr img, #print > .bill.cl .qr canvas { width:120px !important; height:120px !important; }
+    #print > .bill.cl .cl-sg { font-size:13px; padding-bottom:6mm; }
+  }
 </style>
 </head>
 <body>
@@ -2862,6 +2879,37 @@ function setAccent(k){ if(!THEMES[k]) return; thAccent=k; try{ localStorage.setI
 function setMode(v){ thMode=v; try{ localStorage.setItem("dormMode",v); }catch(e){} applyTheme(); }
 try{ if(window.matchMedia){ const mq=window.matchMedia("(prefers-color-scheme: dark)"); const f=()=>{ if(thMode==="auto") applyTheme(); }; mq.addEventListener ? mq.addEventListener("change",f) : mq.addListener && mq.addListener(f); } }catch(e){}
 applyTheme();
+
+/* ================= กันพลาดแบบง่าย: เลขห้องซ้ำ + ยืนยันก่อนติ๊กจ่าย ================= */
+let skipPaidConfirm=false;
+(function(){
+  const box=$("rooms");
+  if(box){
+    box.addEventListener("focusin",e=>{ const t=e.target; if(t.tagName==="INPUT" && /'no'/.test(t.getAttribute("oninput")||"")) t.dataset.prev=t.value; });
+    box.addEventListener("change",e=>{
+      const t=e.target, a=(t.getAttribute&&t.getAttribute("oninput"))||"";
+      const m=a.match(/^upd\((\d+),'no'/); if(!m) return;
+      const i=+m[1], v=String(t.value).trim(); if(!v) return;
+      if(S.rooms.some((r,j)=>j!==i && String(r.no).trim()===v)){
+        alert("มีห้องเลข "+v+" อยู่แล้ว ใช้เลขซ้ำไม่ได้");
+        const prev=t.dataset.prev||""; t.value=prev; S.rooms[i].no=prev; save(); renderRooms(); renderTop();
+      }
+    });
+  }
+  const sp=window.setPaid;
+  if(typeof sp==="function") window.setPaid=function(id,on){
+    if(!skipPaidConfirm){
+      const h=S.hist.find(x=>x.id===id);
+      if(h){
+        const msg = on ? `รับเงิน ห้อง ${h.room} จำนวน ${fmt(owed(h))} บาท ใช่ไหม?` : `ยกเลิกสถานะ "จ่ายแล้ว" ของห้อง ${h.room} ใช่ไหม?`;
+        if(!confirm(msg)){ renderHist(); return; }
+      }
+    }
+    return sp.apply(this,arguments);
+  };
+  const qp=window.qpPay;
+  if(typeof qp==="function") window.qpPay=function(){ skipPaidConfirm=true; try{ return qp.apply(this,arguments); } finally { skipPaidConfirm=false; } };
+})();
 
 /* ================= ตั้งค่าห้องทั้งชั้น ================= */
 let frFloors=[], frBy={};
