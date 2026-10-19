@@ -1276,6 +1276,9 @@ window.QRCode=function(el,o){
 window.QRCode.CorrectLevel={L:1,M:0,Q:3,H:2};
 })();</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <style>
   * { box-sizing: border-box; }
   body { font-family:"Sarabun","Noto Sans Thai",Tahoma,sans-serif; margin:0; background:#eef2f1; color:#222; }
@@ -1349,6 +1352,19 @@ window.QRCode.CorrectLevel={L:1,M:0,Q:3,H:2};
     .bkrow label { display:block; margin-top:0; }
   }
 
+
+  .bill.cl { font-family:"Sarabun","Noto Sans Thai",Tahoma,monospace; line-height:1.5; }
+  .cl-h { display:flex; gap:10px; align-items:flex-start; border-bottom:2px solid #000; padding-bottom:8px; }
+  .cl-n { font-size:20px; font-weight:bold; }
+  .cl-t { text-align:center; font-size:20px; font-weight:bold; margin:4px 0; }
+  .cl-i { margin:14px 0 8px; font-size:14px; }
+  .cl-tb { border-collapse:collapse; width:100%; border:0 !important; }
+  .cl-tb th, .cl-tb td { border:0 !important; padding:3px 6px; vertical-align:top; background:none; }
+  .cl-tb tr.hd th { border-top:1px dashed #000 !important; border-bottom:1px dashed #000 !important; background:none; }
+  .cl-tb td.no { width:34px; }
+  .cl-tb tr.tt td { border-top:1px dashed #000 !important; border-bottom:1px dashed #000 !important; font-size:16px; }
+  .cl-sg { display:flex; justify-content:space-between; margin-top:28px; font-size:13px; text-align:center; }
+  @media print { .pg2 .cl-sg { margin-top:10px; } }
   /* ใบบิล / ใบเสร็จ */
   #print { display:none; }
   #snap { position:fixed; left:-9999px; top:0; width:620px; background:#fff; }
@@ -1393,13 +1409,20 @@ window.QRCode.CorrectLevel={L:1,M:0,Q:3,H:2};
 </style>
 </head>
 <body>
+<div id="login" style="display:none;position:fixed;inset:0;background:#1f7a4d;z-index:98;color:#fff;text-align:center;padding:12vh 20px 0">
+  <div style="font-size:22px;margin-bottom:14px">☁️ เข้าสู่ระบบ <span id="lgName"></span></div>
+  <input id="lgEmail" type="email" placeholder="อีเมล" autocomplete="username" style="max-width:300px;text-align:left"><br><br>
+  <input id="lgPw" type="password" placeholder="รหัสผ่าน" autocomplete="current-password" style="max-width:300px;text-align:left" onkeydown="if(event.key==='Enter')cloudLogin()">
+  <div id="lgMsg" style="min-height:24px;margin:8px"></div>
+  <button style="background:#fff;color:#1f7a4d;font-size:18px;padding:12px 30px" onclick="cloudLogin()">เข้าสู่ระบบ</button>
+  <p style="margin-top:30px"><a href="#" style="color:#d7f0e3" onclick="fbDisconnect();return false">ใช้แบบไม่ออนไลน์ (ยกเลิกการเชื่อมต่อในเครื่องนี้)</a></p></div>
 <div id="lock"><div style="font-size:22px;margin-bottom:12px">🔒 <span id="lockName"></span></div>
   <input id="lockIn" type="password" inputmode="numeric" placeholder="รหัส PIN" onkeydown="if(event.key==='Enter')tryUnlock()">
   <div id="lockMsg" style="height:24px;margin:8px"></div>
   <button style="background:#fff;color:#1f7a4d;font-size:18px;padding:12px 30px" onclick="tryUnlock()">เข้าสู่ระบบ</button>
   <p style="margin-top:30px"><a href="#" style="color:#d7f0e3" onclick="$('lockFile').click();return false">ลืมรหัส? รีเซ็ตด้วยไฟล์สำรอง</a></p>
   <input id="lockFile" type="file" accept=".json" style="display:none" onchange="resetWithBackup(this)"></div>
-<header>🏠 <span id="hdrName">ทองอนันต์ แมนชั่น</span><span style="margin-left:auto;display:flex;gap:6px"><button class="sm" style="background:#17613d" onclick="fs(-1)">A−</button><button class="sm" style="background:#17613d" onclick="fs(1)">A+</button></span></header>
+<header>🏠 <span id="hdrName">ทองอนันต์ แมนชั่น</span><span id="syncSt" style="font-size:12px;font-weight:normal;margin-left:10px"></span><span style="margin-left:auto;display:flex;gap:6px"><button class="sm" style="background:#17613d" onclick="fs(-1)">A−</button><button class="sm" style="background:#17613d" onclick="fs(1)">A+</button></span></header>
 <main>
 
   <!-- 1: บิลเดือนนี้ -->
@@ -1519,6 +1542,7 @@ window.QRCode.CorrectLevel={L:1,M:0,Q:3,H:2};
         <div><label>ค่าน้ำ บาท/หน่วย</label><input id="wr" type="number" inputmode="decimal"></div>
         <div><label>ค่าน้ำขั้นต่ำ (บาท)</label><input id="wmin" type="number" inputmode="decimal"></div>
         <div><label>ครบกำหนดชำระ วันที่</label><input id="dueDay" type="number" inputmode="numeric"></div>
+        <div><label>ค่าบริการทั่วไป (บาท/ห้อง/เดือน)</label><input id="svc" type="number" inputmode="decimal"></div>
         <div><label>ค่าปรับจ่ายช้า (บาท/วัน)</label><input id="lateFee" type="number" inputmode="decimal"></div>
         <div><label>เตือนเมื่อใช้เกินกี่เท่า</label><input id="warn" type="number" inputmode="decimal"></div>
       </div>
@@ -1537,6 +1561,25 @@ window.QRCode.CorrectLevel={L:1,M:0,Q:3,H:2};
       <p class="hint">กันคนอื่นเปิดดูข้อมูลผู้เช่า (ถ้าลืม ต้องใช้ไฟล์สำรองรีเซ็ต) สถานะ: <b id="pinState"></b></p>
       <input id="pinNew" type="password" inputmode="numeric" placeholder="รหัส 4-8 หลัก">
       <div class="g2"><button class="full" onclick="setPin()">ตั้ง/เปลี่ยนรหัส</button><button class="full gray" onclick="clearPin()">ปิดการล็อก</button></div>
+    </div>
+    <div class="card">
+      <h2>☁️ ระบบออนไลน์ (Firebase)</h2>
+      <p class="hint">โปรเจกต์: <b id="fbProj">-</b> · สถานะ: <b id="fbState">-</b></p>
+      <p class="hint">เชื่อมแล้วข้อมูลจะซิงก์ทุกเครื่องที่ล็อกอิน (ถ้าสองเครื่องแก้ข้อมูลหมวดเดียวกันพร้อมกัน ฉบับที่บันทึกทีหลังจะทับ)</p>
+      <label>วาง firebaseConfig ทั้งก้อนที่นี่ (ทำครั้งเดียวต่อเครื่อง)</label>
+      <textarea id="fbCfg" rows="5" placeholder='{ apiKey: "...", authDomain: "...", projectId: "...", appId: "..." }'></textarea>
+      <button class="full blue" onclick="fbConnect()">🔗 เชื่อมต่อ</button>
+      <div class="g2"><button class="full gray" onclick="fbLogout()">ออกจากระบบ</button><button class="full gray" onclick="fbDisconnect()">ยกเลิกการเชื่อมต่อ</button></div>
+      <details><summary>🔐 กฎความปลอดภัย Firestore (วางใน Firebase Console → Firestore → Rules)</summary>
+<pre style="white-space:pre-wrap;font-size:12px;background:#f3f3f3;padding:8px;border-radius:6px">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /dormData/{doc} {
+      allow read, write: if request.auth != null
+        &amp;&amp; request.auth.token.email in ['อีเมลที่1@gmail.com','อีเมลที่2@gmail.com'];
+    }
+  }
+}</pre><p class="hint">ใส่อีเมลของผู้ที่อนุญาตให้ใช้เท่านั้น แล้วกด Publish</p></details>
     </div>
     <div class="card">
       <h2>💾 สำรอง / นำเข้าข้อมูล</h2>
@@ -1568,17 +1611,22 @@ const num = v => +v || 0;
 const fmt = n => num(n).toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2});
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 const KEY = "dormProV2", OLD = "dormProV1";
-let S = { cfg:{dorm:"ทองอนันต์ แมนชั่น",addr:"",er:8,wr:18,wmin:0,dueDay:5,lateFee:0,warn:2,note:"",pp:"",ppName:"",taxId:"",logo:"",lastBackup:"",perPage:"1",pin:""}, rooms:[], hist:[], repairs:[], moves:[], seq:0 };
+let S = { cfg:{dorm:"ทองอนันต์ แมนชั่น",addr:"",er:10,wr:22,svc:100,wmin:0,dueDay:5,lateFee:0,warn:2,note:"",pp:"",ppName:"",taxId:"",logo:"",lastBackup:"",perPage:"1",pin:""}, rooms:[], hist:[], repairs:[], moves:[], seq:0 };
 let curHM = "";
 
 function load(){
   try{
     const x=JSON.parse(localStorage.getItem(KEY) || localStorage.getItem(OLD));
+    if(!x){ seedRooms(); }
     if(x){ S.cfg=Object.assign(S.cfg,x.cfg||{}); S.rooms=x.rooms||[]; S.hist=x.hist||[]; S.repairs=x.repairs||[]; S.moves=x.moves||[]; S.seq=x.seq||0; }
     if(S.cfg.dorm==="หอพักสุขสบาย") S.cfg.dorm="ทองอนันต์ แมนชั่น";
   }catch(e){}
 }
-function save(){ localStorage.setItem(KEY, JSON.stringify(S)); }
+function seedRooms(){
+  for(let f=1;f<=5;f++) for(let j=1;j<=19;j++){ if(j===10) continue; const r=newRoom(String(f*100+j),2200); S.rooms.push(r); }
+  save();
+}
+function save(){ localStorage.setItem(KEY, JSON.stringify(S)); if(typeof cloudDirty==="function") cloudDirty(); }
 
 /* ---------- วันที่ ---------- */
 const p2 = n => String(n).padStart(2,"0");
@@ -1639,8 +1687,8 @@ function calc(r){
   const euu=Math.max(0,eu), wuu=Math.max(0,wu);
   const ea=euu*num(C.er); let wa=wuu*num(C.wr);
   if(num(C.wmin) && wa<num(C.wmin)) wa=num(C.wmin);
-  return { eu:euu, wu:wuu, ea, wa, rent:num(r.rent), other:num(r.other),
-           total:num(r.rent)+ea+wa+num(r.other), errE:eu<0, errW:wu<0 };
+  return { eu:euu, wu:wuu, ea, wa, rent:num(r.rent), other:num(r.other)+num(C.svc),
+           total:num(r.rent)+ea+wa+num(r.other)+num(C.svc), errE:eu<0, errW:wu<0 };
 }
 function warnings(r){
   const c=calc(r), w=[], f=num(S.cfg.warn)||2;
@@ -1856,51 +1904,44 @@ function whtRows(b,grand){
       <tr class="t"><td colspan="5" class="n">ยอดโอนสุทธิ</td><td class="n">${fmt(grand-w)}</td></tr>`;
 }
 const tenantBlock = b => (b.tAddr?`<div style="grid-column:1/-1">ที่อยู่ผู้เช่า: ${esc(b.tAddr)}</div>`:"")+(b.tTax?`<div style="grid-column:1/-1">เลขประจำตัวผู้เสียภาษี: ${esc(b.tTax)}</div>`:"");
-function billHTML(b){
+function clDoc(b, rc){
   const C=S.cfg, issue=new Date(), due=dueDate(b.month);
   const late=b.pre?0:(b.paid?num(b.late):lateNow(b)), grand=num(b.total)+late, net=grand-num(b.wht);
-  const qr = (C.pp && !b.paid) ? `<div class="qrbox"><div class="qr" data-amt="${net}"></div><div>สแกนจ่ายพร้อมเพย์<br><b>${fmt(net)} บาท</b>${C.ppName?`<br>${esc(C.ppName)}`:""}</div></div>` : "";
-  return `<div class="bill">${docHead("ใบแจ้งหนี้ค่าเช่าห้องพัก",`<div>เลขที่ <b>${invNo(b)}</b></div><div>วันที่ออก <b>${thDate(issue)}</b></div>`)}
-    <div class="info">
-      <div><span>ห้อง</span><b>${esc(b.room)}</b></div><div><span>ผู้เช่า</span><b>${esc(b.tenant)||"-"}</b></div>
-      <div><span>ประจำเดือน</span><b>${thMonth(b.month)}</b></div><div class="due"><span>ครบกำหนดชำระ</span><b>${thDate(due)}</b></div>${tenantBlock(b)}
-    </div>
-    <table>
-      <tr><th>รายการ</th><th class="n">เลขก่อน</th><th class="n">เลขหลัง</th><th class="n">หน่วย</th><th class="n">อัตรา</th><th class="n">บาท</th></tr>
-      ${itemRows(b,late)}
-      <tr class="t"><td colspan="5" class="n">รวมทั้งสิ้น</td><td class="n">${fmt(grand)}</td></tr>
-      ${whtRows(b,grand)}
+  const [yy,mm]=b.month.split("-").map(Number), last=new Date(yy,mm,0).getDate();
+  const d1=`01/${p2(mm)}/${yy+543}`, d2=`${p2(last)}/${p2(mm)}/${yy+543}`;
+  const stamp=rc ? thDateStr(b.paidDate) : `${p2(issue.getDate())}/${p2(issue.getMonth()+1)}/${issue.getFullYear()+543} เวลา ${p2(issue.getHours())}:${p2(issue.getMinutes())}`;
+  const qr = (!rc && C.pp && !b.paid) ? `<div class="qrbox"><div class="qr" data-amt="${net}"></div><div>สแกนจ่ายพร้อมเพย์<br><b>${fmt(net)} บาท</b>${C.ppName?`<br>${esc(C.ppName)}`:""}</div></div>` : "";
+  const meter=(no,name,o,n,u,rate,amt)=>`<tr><td class="no">${no}</td><td colspan="2">${name}<br>&nbsp;&nbsp;- มิเตอร์เก่า<br>&nbsp;&nbsp;- มิเตอร์ใหม่<br>&nbsp;&nbsp;- จำนวนหน่วยที่ใช้ (หน่วยละ ${fmt(rate)} บาท)</td>
+    <td class="n"><br>${o}<br>${n}<br>${u}</td><td class="n"><br><br><br>${fmt(amt)}</td></tr>`;
+  const title = rc ? "ใบเสร็จรับเงิน" : "ใบแจ้งหนี้";
+  const docNo = rc ? (b.rc||"-") : invNo(b);
+  const hd=`<div class="cl-h">${C.logo?`<img src="${C.logo}" style="max-height:56px;max-width:90px">`:""}<div style="flex:1"><div class="cl-n">${esc(C.dorm)}</div>${C.addr?`<div class="da">${esc(C.addr)}</div>`:""}${C.taxId?`<div class="da">เลขประจำตัวผู้เสียภาษี ${esc(C.taxId)}</div>`:""}</div>
+    <div class="dr"><div class="dt">${title}</div><div>เลขที่ <b>${esc(docNo)}</b></div>${rc?`<div>อ้างอิงใบแจ้งหนี้ ${invNo(b)}</div><div class="paidtag">✔ ชำระแล้ว</div>`:""}</div></div>`;
+  const o=num(b.other);
+  return `<div class="bill cl">${hd}
+    <div class="cl-i">${rc?"วันที่รับเงิน":"พิมพ์เมื่อ วันที่"} ${stamp}<br>
+      ${rc?"ได้รับเงินค่าเช่าห้อง":"เรียกเก็บค่าเช่าห้อง"} เลขห้อง <b>${esc(b.room)}</b><br>
+      ตั้งแต่ วันที่ ${d1} เวลา 00:00 ถึง วันที่ ${d2} เวลา 23:59<br>
+      เพื่อชำระค่าเช่าและค่าบริการประจำเดือน${thMonth(b.month)}${rc?"":` (ครบกำหนดชำระ ${thDate(due)})`}</div>
+    <table class="cl-tb">
+      <tr class="hd"><th>ที่</th><th colspan="2" style="text-align:left">รายการ</th><th class="n">จำนวนหน่วย</th><th class="n">จำนวนเงิน</th></tr>
+      <tr><td class="no">1.</td><td colspan="2">ค่าห้อง</td><td class="n">1.00</td><td class="n">${fmt(b.rent)}</td></tr>
+      ${meter("2.","ค่าไฟฟ้า",b.e0,b.e1,b.eu,b.er,b.ea)}
+      ${meter("3.","ค่าประปา",b.w0,b.w1,b.wu,b.wr,b.wa)}
+      ${o?`<tr><td class="no">4.</td><td colspan="2">ค่าใช้จ่ายอื่นๆ (ค่าบริการทั่วไป)</td><td class="n"></td><td class="n">${fmt(o)}</td></tr>`:""}
+      ${late>0?`<tr><td class="no">${o?5:4}.</td><td colspan="2">ค่าปรับล่าช้า</td><td class="n"></td><td class="n">${fmt(late)}</td></tr>`:""}
+      <tr class="tt"><td colspan="3" class="n">รวม</td><td class="n"></td><td class="n"><b>${fmt(grand)}</b> บาท</td></tr>
+      ${num(b.wht)?`<tr><td colspan="4" class="n">หัก ภาษี ณ ที่จ่าย 5% (ค่าเช่า)</td><td class="n">- ${fmt(num(b.wht))}</td></tr><tr class="tt"><td colspan="4" class="n">${rc?"รวมที่ได้รับจริง":"ยอดโอนสุทธิ"}</td><td class="n"><b>${fmt(net)}</b></td></tr>`:""}
     </table>
-    <div class="foot">
-      <div>ยอดที่ต้องชำระ: <b>(${bahtText(net)})</b>
-        ${num(C.lateFee)>0?`<div class="hint">ชำระหลังวันครบกำหนด คิดค่าปรับวันละ ${fmt(C.lateFee)} บาท</div>`:""}
-        ${C.note?`<div style="margin-top:4px">หมายเหตุ: ${esc(C.note)}</div>`:""}</div>
-      ${qr}
-    </div>
-    <div class="sign"><div>ผู้เช่า</div><div>ผู้รับเงิน / เจ้าของหอ</div></div>
-    <div class="fine">ขอบคุณที่ใช้บริการ ${esc(C.dorm)}</div>
+    <div class="foot"><div>(${bahtText(net)})
+      ${(!rc&&num(C.lateFee)>0)?`<div class="hint">ชำระหลังวันครบกำหนด คิดค่าปรับวันละ ${fmt(C.lateFee)} บาท</div>`:""}
+      ${C.note?`<div style="margin-top:4px">หมายเหตุ: ${esc(C.note)}</div>`:""}${b.note?`<div>${esc(b.note)}</div>`:""}</div>${qr}</div>
+    <div class="cl-sg"><div>ลงนาม..................(ผู้จัดการ)<br>(..................)</div><div>ลงนาม..................(ผู้รับเงิน)<br>(..................)</div></div>
+    ${rc?`<div class="fine">เอกสารนี้ไม่ใช่ใบกำกับภาษี</div>`:""}
   </div>`;
 }
-function receiptHTML(h){
-  const late=num(h.late), grand=num(h.total)+late;
-  return `<div class="bill">${docHead("ใบเสร็จรับเงิน",`<div>เลขที่ <b>${esc(h.rc||"-")}</b></div><div>วันที่รับเงิน <b>${thDateStr(h.paidDate)}</b></div><div class="paidtag">✔ ชำระแล้ว</div>`)}
-    <div class="info">
-      <div><span>ห้อง</span><b>${esc(h.room)}</b></div><div><span>ได้รับเงินจาก</span><b>${esc(h.tenant)||"-"}</b></div>
-      <div><span>ค่าเช่าและค่าบริการประจำเดือน</span><b>${thMonth(h.month)}</b></div><div><span>อ้างอิงใบแจ้งหนี้</span><b>${invNo(h)}</b></div>${tenantBlock(h)}
-    </div>
-    <table>
-      <tr><th>รายการ</th><th class="n">เลขก่อน</th><th class="n">เลขหลัง</th><th class="n">หน่วย</th><th class="n">อัตรา</th><th class="n">บาท</th></tr>
-      ${itemRows(h,late)}
-      <tr class="t"><td colspan="5" class="n">${num(h.wht)?"รวมค่าเช่าและค่าบริการ":"รวมที่ได้รับ"}</td><td class="n">${fmt(grand)}</td></tr>
-      ${whtRows(h,grand).replace("ยอดโอนสุทธิ","รวมที่ได้รับจริง")}
-    </table>
-    <p>จำนวนเงิน <b>(${bahtText(grand-num(h.wht))})</b></p>
-    ${num(h.wht)?`<p class="hint">ผู้เช่าจะออกหนังสือรับรองการหักภาษี ณ ที่จ่ายให้ภายหลัง</p>`:""}
-    ${h.note?`<p>หมายเหตุ: ${esc(h.note)}</p>`:""}
-    <div class="sign"><div>ผู้จ่ายเงิน</div><div>ผู้รับเงิน / เจ้าของหอ</div></div>
-    <div class="fine">ขอบคุณที่ใช้บริการ ${esc(S.cfg.dorm)} · เอกสารนี้ไม่ใช่ใบกำกับภาษี</div>
-  </div>`;
-}
+const billHTML = b => clDoc(b,false);
+const receiptHTML = h => clDoc(h,true);
 function printDocs(list, noPair){
   if(!list.length){ alert("ยังไม่มีห้อง/บิล"); return; }
   const box=$("print");
@@ -2326,7 +2367,7 @@ function renderSummary(){
 
 /* ---------- ตั้งค่า / สำรองข้อมูล ---------- */
 function bindSettings(){
-  ["dorm","addr","taxId","perPage","er","wr","wmin","dueDay","lateFee","warn","note","pp","ppName"].forEach(k=>{
+  ["dorm","addr","taxId","perPage","svc","er","wr","wmin","dueDay","lateFee","warn","note","pp","ppName"].forEach(k=>{
     $(k).value=S.cfg[k];
     $(k).oninput=()=>{ S.cfg[k]=$(k).value; save(); if(k==="dorm") $("hdrName").textContent=S.cfg.dorm; renderRooms(); };
   });
@@ -2363,6 +2404,7 @@ function importData(inp){
   rd.readAsText(f); inp.value="";
 }
 function wipe(){
+  if(cloud.on) alert("ระบบออนไลน์เปิดอยู่: การล้างนี้ลบเฉพาะในเครื่อง ข้อมูลบนคลาวด์จะถูกดึงกลับมาเมื่อเปิดใหม่ (ถ้าต้องการลบจริงให้ลบใน Firebase Console)");
   if(confirm("ลบข้อมูลทั้งหมด? กู้คืนไม่ได้ (ควรดาวน์โหลดไฟล์สำรองก่อน)") && confirm("ยืนยันอีกครั้ง ลบจริงๆ?")){
     localStorage.removeItem(KEY); localStorage.removeItem(OLD); location.reload();
   }
@@ -2559,10 +2601,110 @@ function exportTenants(){
   a.download=`รายชื่อผู้เช่า-${todayStr()}.csv`; a.click();
 }
 
+/* ================= ออนไลน์ (Firebase) ================= */
+const FB_EMBED = null; /* ใส่ config ตรงนี้ได้ เช่น {apiKey:"...",authDomain:"...",projectId:"...",appId:"..."} จะได้ไม่ต้องวางทุกเครื่อง */
+let FBC = FB_EMBED; try{ if(!FBC) FBC = JSON.parse(localStorage.getItem("dormFbCfg")||"null"); }catch(e){}
+const cloud = { on:false, db:null, auth:null, ready:false, pushed:{}, timer:null, unsub:null, dev:Math.random().toString(36).slice(2,8) };
+function setSync(t){ const e=$("syncSt"); if(e) e.textContent=t; const s=$("fbState"); if(s) s.textContent=t; }
+function parseFbCfg(t){
+  t=String(t||"").trim();
+  try{ const o=JSON.parse(t); if(o.apiKey&&o.projectId) return o; }catch(e){}
+  const o={};
+  ["apiKey","authDomain","projectId","storageBucket","messagingSenderId","appId"].forEach(k=>{
+    const m=t.match(new RegExp(k+"\\s*['\"]?\\s*:\\s*['\"]([^'\"]+)['\"]")); if(m) o[k]=m[1];
+  });
+  return (o.apiKey&&o.projectId)?o:null;
+}
+function fbConnect(){
+  const o=parseFbCfg($("fbCfg").value);
+  if(!o){ alert("อ่านค่า config ไม่ได้ ให้คัดลอกก้อน firebaseConfig ทั้งก้อนมาวาง (ต้องมี apiKey และ projectId)"); return; }
+  localStorage.setItem("dormFbCfg",JSON.stringify(o)); alert("บันทึกแล้ว กำลังโหลดใหม่เพื่อเข้าสู่หน้าล็อกอิน"); location.reload();
+}
+function fbDisconnect(){
+  if(!confirm("ยกเลิกการเชื่อมต่อออนไลน์ในเครื่องนี้? (ข้อมูลบนคลาวด์ไม่ถูกลบ และข้อมูลในเครื่องยังอยู่)")) return;
+  localStorage.removeItem("dormFbCfg"); location.reload();
+}
+function fbLogout(){ if(cloud.auth) cloud.auth.signOut(); }
+function cloudLogin(){
+  const e=$("lgEmail").value.trim(), p=$("lgPw").value;
+  if(!e||!p){ $("lgMsg").textContent="กรอกอีเมลและรหัสผ่าน"; return; }
+  $("lgMsg").textContent="กำลังเข้าสู่ระบบ…";
+  cloud.auth.signInWithEmailAndPassword(e,p).catch(err=>{
+    const c=err&&err.code||"";
+    $("lgMsg").textContent = /invalid|wrong|not-found/.test(c) ? "อีเมลหรือรหัสผ่านไม่ถูกต้อง" : /network/.test(c) ? "ต่ออินเทอร์เน็ตไม่ได้" : /too-many/.test(c) ? "ลองผิดหลายครั้ง รอสักครู่แล้วลองใหม่" : "เข้าสู่ระบบไม่สำเร็จ ("+c+")";
+  });
+}
+function chunks(){
+  const c={};
+  c.meta=JSON.stringify({cfg:Object.assign({},S.cfg,{pin:""}),seq:S.seq||0});
+  c.rooms=JSON.stringify(S.rooms); c.repairs=JSON.stringify(S.repairs); c.moves=JSON.stringify(S.moves);
+  const bm={}; S.hist.forEach(h=>{ (bm[h.month]=bm[h.month]||[]).push(h); });
+  Object.keys(cloud.pushed).forEach(k=>{ if(k.indexOf("hist_")===0 && !(k.slice(5) in bm)) bm[k.slice(5)]=[]; });
+  Object.keys(bm).forEach(m=>{ c["hist_"+m]=JSON.stringify(bm[m]); });
+  return c;
+}
+function cloudDirty(){
+  if(!cloud.on||!cloud.ready) return;
+  setSync("⏳ กำลังบันทึก…"); clearTimeout(cloud.timer); cloud.timer=setTimeout(cloudPush,1500);
+}
+async function cloudPush(){
+  if(!cloud.on||!cloud.ready) return;
+  const c=chunks(), ops=Object.keys(c).filter(k=>cloud.pushed[k]!==c[k]);
+  if(!ops.length){ setSync("☁️ ซิงก์แล้ว"); return; }
+  try{
+    const b=cloud.db.batch();
+    ops.forEach(k=>{ b.set(cloud.db.collection("dormData").doc(k),{json:c[k],by:cloud.dev,t:firebase.firestore.FieldValue.serverTimestamp()}); cloud.pushed[k]=c[k]; });
+    await b.commit(); setSync("☁️ ซิงก์แล้ว");
+  }catch(e){ ops.forEach(k=>delete cloud.pushed[k]); setSync("⚠️ บันทึกไม่สำเร็จ (จะลองใหม่เมื่อแก้ไขครั้งต่อไป)"); console.error(e); }
+}
+function refreshAll(){ try{ bindSettings(); fillMonths(); renderRooms(); renderTop(); pinState(); }catch(e){ console.error(e); } }
+function cloudListen(){
+  if(cloud.unsub) cloud.unsub();
+  cloud.unsub=cloud.db.collection("dormData").onSnapshot(snap=>{
+    const have={}; snap.docs.forEach(d=>{ have[d.id]=d; });
+    if(!cloud.ready){
+      if(snap.metadata.fromCache && !have.rooms) return;
+      cloud.ready=true;
+      if(!have.rooms){ cloudPush(); return; }
+    }
+    let changed=false;
+    Object.keys(have).forEach(id=>{
+      const d=have[id], json=(d.data()||{}).json;
+      if(typeof json!=="string" || d.metadata.hasPendingWrites || cloud.pushed[id]===json) return;
+      let v; try{ v=JSON.parse(json); }catch(e){ return; }
+      cloud.pushed[id]=json; changed=true;
+      if(id==="meta"){ S.cfg=Object.assign(S.cfg,v.cfg||{},{pin:S.cfg.pin}); S.seq=v.seq||0; }
+      else if(id==="rooms") S.rooms=v;
+      else if(id==="repairs") S.repairs=v;
+      else if(id==="moves") S.moves=v;
+      else if(id.indexOf("hist_")===0){ const m=id.slice(5); S.hist=S.hist.filter(h=>h.month!==m).concat(v); }
+    });
+    if(changed){
+      try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){}
+      const a=document.activeElement, typing=a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&!$("lock").contains(a)&&!$("login").contains(a);
+      if(typing) setTimeout(refreshAll,4000); else refreshAll();
+    }
+    setSync("☁️ ซิงก์แล้ว");
+  },err=>{ console.error(err); setSync("⚠️ เชื่อมต่อไม่ได้: "+(err.code||"")); });
+}
+function cloudInit(){
+  const st=$("fbProj"); if(st) st.textContent = FBC ? FBC.projectId : "ยังไม่ได้เชื่อมต่อ";
+  if(!FBC) return;
+  if(typeof firebase==="undefined"){ setSync("⚠️ ออฟไลน์ (ใช้ข้อมูลในเครื่อง)"); return; }
+  try{ firebase.initializeApp(FBC); }catch(e){}
+  cloud.auth=firebase.auth(); cloud.db=firebase.firestore();
+  try{ cloud.db.enablePersistence({synchronizeTabs:true}).catch(()=>{}); }catch(e){}
+  cloud.on=true; setSync("🔒 ยังไม่ได้เข้าสู่ระบบ");
+  cloud.auth.onAuthStateChanged(u=>{
+    if(u){ $("login").style.display="none"; setSync("⏳ กำลังเชื่อมต่อ…"); cloudListen(); }
+    else{ if(cloud.unsub){ cloud.unsub(); cloud.unsub=null; } cloud.ready=false; cloud.pushed={}; $("login").style.display="block"; setSync("🔒 ยังไม่ได้เข้าสู่ระบบ"); }
+  });
+}
+
 /* ---------- เริ่มต้น ---------- */
 load();
 $("month").value=monthStr(); $("rpm").value=monthStr(); $("rp_date").value=todayStr();
-bindSettings(); setView(view); renderTop(); fillMonths(); applyFs(); pinState(); showLock(); qpRender();
+bindSettings(); setView(view); renderTop(); fillMonths(); applyFs(); pinState(); showLock(); qpRender(); cloudInit();
 </script>
 </body>
 </html>
