@@ -1784,7 +1784,7 @@ function mkBill(r, month){
   return { id:uid(), pre:true, month, room:r.no, tenant:r.tenant, rent:c.rent, e0:num(r.e0), e1:num(r.e1), eu:c.eu,
            w0:num(r.w0), w1:num(r.w1), wu:c.wu, er:num(S.cfg.er), wr:num(S.cfg.wr), ea:c.ea, wa:c.wa,
            other:c.other, total:c.total, paid:false, paidDate:"", late:0,
-           tAddr:r.tAddr||"", tTax:r.tTax||"", wht:whtOf(c.rent,r.wht) };
+           tAddr:r.tAddr||"", tTax:r.tTax||"", wht:whtOf(c.rent,r.wht), svc:num(S.cfg.svc) };
 }
 let flt={floor:"all",q:""};
 function floorOf(no){
@@ -2020,8 +2020,57 @@ function clDoc(b, rc){
     ${rc?`<div class="fine">เอกสารนี้ไม่ใช่ใบกำกับภาษี</div>`:""}
   </div>`;
 }
-const billHTML = b => clDoc(b,false);
-const receiptHTML = h => clDoc(h,true);
+/* บิลแบบใกล้เคียงใบเดิม (หัวกลาง, เรียกเก็บจาก, ค่าใช้จ่ายอื่นๆ แยกรายการ, ไม่มีค่าโทรศัพท์) — clDoc ตัวเดิมยังอยู่ครบ */
+function clDocNew(b, rc){
+  const C=S.cfg, issue=new Date(), due=dueDate(b.month);
+  const late=b.pre?0:(b.paid?num(b.late):lateNow(b)), grand=num(b.total)+late, net=grand-num(b.wht);
+  const [yy,mm]=b.month.split("-").map(Number), last=new Date(yy,mm,0).getDate();
+  const d1=`01/${p2(mm)}/${yy+543}`, d2=`${p2(last)}/${p2(mm)}/${yy+543}`;
+  const stamp=rc ? thDateStr(b.paidDate) : `${p2(issue.getDate())}/${p2(issue.getMonth()+1)}/${issue.getFullYear()+543} เวลา ${p2(issue.getHours())}:${p2(issue.getMinutes())}`;
+  const qr=(!rc && C.pp && !b.paid) ? `<div class="qrbox"><div class="qr" data-amt="${net}"></div><div>สแกนจ่ายพร้อมเพย์<br><b>${fmt(net)} บาท</b>${C.ppName?`<br>${esc(C.ppName)}`:""}</div></div>` : "";
+  const meter=(no,name,o,n,u,amt)=>`<tr><td class="no">${no}</td><td colspan="2">${name}<br>&nbsp;&nbsp;- มิเตอร์เก่า<br>&nbsp;&nbsp;- มิเตอร์ใหม่<br>&nbsp;&nbsp;- เปลี่ยนแปลง</td>
+    <td class="n"><br>${o}<br>${n}<br>${u}</td><td class="n"><br><br><br>${fmt(amt)}</td></tr>`;
+  const title=rc ? "ใบเสร็จรับเงิน" : "ใบแจ้งหนี้";
+  const docNo=rc ? (b.rc||"-") : invNo(b);
+  const hd=`<div class="cl-h" style="flex-direction:column;align-items:center;text-align:center;border-bottom:0">
+    ${C.logo?`<img src="${C.logo}" style="max-height:56px;max-width:90px">`:""}
+    <div class="cl-t">${title}</div><div class="cl-n">${esc(C.dorm)}</div>
+    ${C.addr?`<div class="da">${esc(C.addr)}</div>`:""}${C.taxId?`<div class="da">เลขประจำตัวผู้เสียภาษี ${esc(C.taxId)}</div>`:""}
+    <div style="align-self:flex-end;text-align:right;font-size:13px">เลขที่ <b>${esc(docNo)}</b>${rc?` · อ้างอิง ${invNo(b)}`:""}${rc?`<div class="paidtag">✔ ชำระแล้ว</div>`:""}</div></div>`;
+  const other=num(b.other);
+  let svc=(b.svc!==undefined) ? num(b.svc) : (b.final ? 0 : Math.min(num(C.svc),other));
+  svc=Math.min(svc,other);
+  const extra=Math.max(0,other-svc);
+  const sub=(n,name,amt)=>`<tr><td></td><td colspan="3">&nbsp;&nbsp;${n}. ${name}</td><td class="n">${fmt(amt)}</td></tr>`;
+  let k=0;
+  const subs = sub(++k,"ค่าบริการทั่วไป",svc) + (extra>0 ? sub(++k,"ค่าอื่นๆ",extra) : "") + sub(++k,"ค่าการ์ด",0) + sub(++k,"ค่าประกัน",0);
+  return `<div class="bill cl">${hd}
+    <div class="cl-i">${rc?"วันที่รับเงิน":"พิมพ์เมื่อ วันที่"} ${stamp}<br>
+      ${rc?"ได้รับเงินจาก":"เรียกเก็บเงินจาก"} ${esc(b.tenant)||"-"}<br>
+      เลขห้อง <b>${esc(b.room)}</b><br>
+      ตั้งแต่ วันที่ ${d1} เวลา 00:00 ถึง วันที่ ${d2} เวลา 23:59<br>
+      เพื่อชำระค่าเช่าและค่าบริการประจำเดือน${thMonth(b.month)}${rc?"":` (ครบกำหนดชำระ ${thDate(due)})`}</div>
+    <table class="cl-tb">
+      <tr class="hd"><th>ที่</th><th colspan="2" style="text-align:left">รายการ</th><th class="n">จำนวนหน่วย</th><th class="n">จำนวนเงิน</th></tr>
+      <tr><td class="no">1.</td><td colspan="2">ค่าห้อง</td><td class="n">1.00</td><td class="n">${fmt(b.rent)}</td></tr>
+      ${meter("2.","ค่าไฟฟ้า",b.e0,b.e1,b.eu,b.ea)}
+      ${meter("3.","ค่าประปา",b.w0,b.w1,b.wu,b.wa)}
+      <tr><td class="no">4.</td><td colspan="4">ค่าใช้จ่ายอื่นๆ</td></tr>
+      ${subs}
+      ${late>0?`<tr><td class="no">5.</td><td colspan="2">ค่าปรับล่าช้า</td><td class="n"></td><td class="n">${fmt(late)}</td></tr>`:""}
+      <tr class="tt"><td colspan="3" class="n">รวม</td><td class="n"></td><td class="n"><b>${fmt(grand)}</b> บาท</td></tr>
+      ${num(b.wht)?`<tr><td colspan="4" class="n">หัก ภาษี ณ ที่จ่าย 5% (ค่าเช่า)</td><td class="n">- ${fmt(num(b.wht))}</td></tr><tr class="tt"><td colspan="4" class="n">${rc?"รวมที่ได้รับจริง":"ยอดโอนสุทธิ"}</td><td class="n"><b>${fmt(net)}</b></td></tr>`:""}
+    </table>
+    <div class="foot"><div>(${bahtText(net)})
+      ${(!rc&&num(C.lateFee)>0)?`<div class="hint">ชำระหลังวันครบกำหนด คิดค่าปรับวันละ ${fmt(C.lateFee)} บาท</div>`:""}
+      ${C.note?`<div style="margin-top:4px">หมายเหตุ: ${esc(C.note)}</div>`:""}${b.note?`<div>${esc(b.note)}</div>`:""}</div>${qr}</div>
+    <div class="cl-sg"><div>ลงนาม..................(ผู้จัดการ)<br>(..................)</div><div>ลงนาม..................(ผู้รับเงิน)<br>(..................)</div></div>
+    ${rc?`<div class="fine">เอกสารนี้ไม่ใช่ใบกำกับภาษี</div>`:""}
+  </div>`;
+}
+const billHTML = b => clDocNew(b,false);
+/* (ตัวเดิมเก็บไว้) const billHTMLOld = b => clDoc(b,false); */
+const receiptHTML = h => clDocNew(h,true);
 function printDocs(list, noPair){
   if(!list.length){ alert("ยังไม่มีห้อง/บิล"); return; }
   const box=$("print");
