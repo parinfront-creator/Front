@@ -1467,12 +1467,6 @@ window.QRCode.CorrectLevel={L:1,M:0,Q:3,H:2};
     body[data-mode="dark"] h2[style*="e8f4ee"] { background:#26332d !important; }
     body[data-mode="dark"] .bill, body[data-mode="dark"] #snap { color:#000; }
   }
-  /* ===== แถบแจ้งเมื่อรับเงิน (ยกเลิกได้ / พิมพ์ใบเสร็จ) ===== */
-  #payToast { position:fixed; left:12px; right:12px; bottom:14px; z-index:99999; background:#222; color:#fff; border-radius:14px; padding:12px 14px; box-shadow:0 6px 24px rgba(0,0,0,.35); display:none; font-size:16px; max-width:520px; margin:0 auto; }
-  #payToast.on { display:block; }
-  #payToast .pt-b { display:flex; gap:8px; margin-top:8px; }
-  #payToast .pt-b button { flex:1; margin:0; }
-  @media print { #payToast { display:none !important; } }
   /* ===== พิมพ์: ซ่อนหัว/ท้ายกระดาษของเบราว์เซอร์ + ลดขนาดตัวอักษรบิลให้พอดี ===== */
   @page { size:A4 portrait; margin:0; }
   @media print {
@@ -1511,6 +1505,7 @@ window.QRCode.CorrectLevel={L:1,M:0,Q:3,H:2};
 
   <!-- 1: บิลเดือนนี้ -->
   <section class="tab on" id="t1">
+    <div id="lfBar"></div>
     <div id="alerts"></div>
     <div class="card" id="dash"></div>
     <div class="card"><details><summary>📖 วิธีใช้ (ทำเดือนละครั้ง)</summary>
@@ -1655,6 +1650,21 @@ window.QRCode.CorrectLevel={L:1,M:0,Q:3,H:2};
       <p class="hint">QR ใส่ยอดเงินของแต่ละห้องให้อัตโนมัติ (สร้าง QR ได้โดยไม่ต้องต่ออินเทอร์เน็ต)</p>
     </div>
     <div class="card">
+      <h2>💻 เก็บข้อมูลเป็นไฟล์ในคอม (ไม่ต้องใช้อินเทอร์เน็ต)</h2>
+      <p class="hint">เลือกไฟล์ 1 ครั้ง หลังจากนั้นทุกครั้งที่แก้ข้อมูล ระบบจะบันทึกลงไฟล์นั้นให้เองทันที ข้อมูลอยู่ในคอมเครื่องนี้ ใช้ได้กับ Chrome / Edge บนคอม</p>
+      <p style="margin:6px 0">ไฟล์: <b id="lfName">ยังไม่ได้เลือก</b><br>สถานะ: <b id="lfState">-</b></p>
+      <button class="full" id="lfB1" onclick="lfChoose()">📁 สร้างไฟล์ข้อมูลใหม่ (เลือกที่เก็บ)</button>
+      <button class="full blue" id="lfB2" onclick="lfOpen()">📂 เปิดไฟล์ข้อมูลที่มีอยู่</button>
+      <div class="g2"><button class="full gray" id="lfB3" onclick="lfWrite(true)">💾 บันทึกตอนนี้</button><button class="full gray" id="lfB4" onclick="lfUnlink()">เลิกเชื่อมไฟล์</button></div>
+      <p class="hint" id="lfNote"></p>
+      <details><summary>💡 คำแนะนำ</summary><p class="hint">• วางไฟล์ไว้ในโฟลเดอร์ที่ซิงก์อัตโนมัติ (OneDrive / Google Drive / Dropbox) จะได้มีสำเนาสำรองบนคลาวด์ของคุณเองด้วย<br>• อย่าเปิดโปรแกรมนี้พร้อมกัน 2 เครื่องแล้วใช้ไฟล์เดียวกัน ฉบับที่บันทึกทีหลังจะทับ<br>• ถ้าเปิดแล้วเห็นแถบ "เชื่อมไฟล์อีกครั้ง" ให้กดหนึ่งครั้ง (เบราว์เซอร์ขอความยินยอมใหม่ทุกครั้งที่เปิด)</p></details>
+    </div>
+    <div class="card">
+      <h2>📥 ดาวน์โหลดแอปเก็บไว้ในคอม</h2>
+      <p class="hint">ดาวน์โหลดเป็นไฟล์เดียว เปิดได้เลยโดยดับเบิลคลิก ไม่ต้องออนไลน์ ไม่มีหน้าล็อกอิน ข้อมูลอยู่ในคอมเท่านั้น (เวอร์ชันที่ได้จะปิดระบบออนไลน์ไว้) เปิดครั้งแรกให้ไปที่ ตั้งค่า &gt; "เปิดไฟล์ข้อมูลที่มีอยู่" เพื่อดึงข้อมูลเดิมมาใช้</p>
+      <button class="full" onclick="downloadApp()">📥 ดาวน์โหลดแอป (ไฟล์ .html)</button>
+    </div>
+    <div class="card">
       <h2>🔒 รหัส PIN เข้าระบบ</h2>
       <p class="hint">กันคนอื่นเปิดดูข้อมูลผู้เช่า (ถ้าลืม ต้องใช้ไฟล์สำรองรีเซ็ต) สถานะ: <b id="pinState"></b></p>
       <input id="pinNew" type="password" inputmode="numeric" placeholder="รหัส 4-8 หลัก">
@@ -1708,6 +1718,7 @@ service cloud.firestore {
 <div id="snap"></div>
 
 <script>
+const APP_HTML = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num = v => +v || 0;
@@ -1756,7 +1767,9 @@ function save(){
   let ok=true;
   try{ localStorage.setItem(KEY, JSON.stringify(S)); }
   catch(e){ ok=false; if(!storageWarned){ storageWarned=true; alert("บันทึกข้อมูลลงเครื่องไม่สำเร็จ พื้นที่จัดเก็บอาจเต็มหรือถูกปิดอยู่ กรุณาดาวน์โหลดไฟล์สำรองและอย่าปิดหน้านี้จนกว่าจะตรวจสอบข้อมูล"); } console.error("localStorage save failed",e); }
+  try{ localStorage.setItem("dormSavedAt",String(Date.now())); }catch(e){}
   if(typeof cloudDirty==="function") cloudDirty();
+  if(typeof lfDirty==="function") lfDirty();
   return ok;
 }
 
@@ -2215,7 +2228,7 @@ function printHist(id){ printDocs(S.hist.filter(h=>h.id===id).map(billHTML)); }
 function printReceipt(id){ printDocs(S.hist.filter(h=>h.id===id).map(receiptHTML)); }
 
 async function shareHTML(html, name){
-  if(typeof html2canvas==="undefined"){ alert("ต้องต่ออินเทอร์เน็ตเพื่อสร้างรูป"); return; }
+  if(typeof html2canvas==="undefined"){ alert("ตอนนี้ไม่มีอินเทอร์เน็ต สร้างรูปไม่ได้\nระบบจะเปิดหน้าพิมพ์ให้ ให้เลือก 'บันทึกเป็น PDF' แล้วส่งไฟล์ PDF ทางไลน์แทน"); printDocs([html]); return; }
   const box=$("snap"); box.innerHTML=html; drawQRs(box);
   const z0=document.body.style.zoom; document.body.style.zoom=1;
   await new Promise(r=>setTimeout(r,500));
@@ -2819,14 +2832,8 @@ function validateImportFile(x){
     }
   }
 }
-function importData(inp){
-  const f=inp.files[0]; if(!f) return;
-  const rd=new FileReader();
-  rd.onload=()=>{ try{
-    const x=JSON.parse(rd.result);
-    validateImportFile(x);
-    if(!confirm("นำเข้าไฟล์นี้? ข้อมูลปัจจุบันในเครื่องจะถูกแทนที่")) return;
-    snapNow("ก่อนนำเข้าไฟล์");
+function applyImportObj(x,quiet){
+  validateImportFile(x);
     const keepPin=S.cfg.pin;
     const cleanLogo=typeof x.cfg.logo==="string"&&/^data:image\/(png|jpeg|webp);base64,/i.test(x.cfg.logo)&&x.cfg.logo.length<3_000_000?x.cfg.logo:"";
     S={ cfg:Object.assign({},S.cfg,x.cfg,{pin:keepPin,logo:cleanLogo}), rooms:x.rooms.map(r=>{
@@ -2836,14 +2843,24 @@ function importData(inp){
       if(typeof q.eRead!=="boolean") q.eRead=num(q.e1)!==num(q.e0); if(typeof q.wRead!=="boolean") q.wRead=num(q.w1)!==num(q.w0);
       return q;
     }), hist:x.hist.map(h=>Object.assign({},h,{id:safeRecordId(h.id),room:String(h.room||""),tenant:String(h.tenant||"")})), repairs:Array.isArray(x.repairs)?x.repairs.map(r=>Object.assign({},r,{id:safeRecordId(r.id)})):[], moves:Array.isArray(x.moves)?x.moves:[], seq:Math.max(0,Number(x.seq)||0) };
-    migrateMoveBalances(); save(); bindSettings(); renderRooms(); renderTop(); fillMonths(); alert("นำเข้าข้อมูลแล้ว");
+    migrateMoveBalances(); save(); bindSettings(); renderRooms(); renderTop(); fillMonths(); if(!quiet) alert("นำเข้าข้อมูลแล้ว");
+}
+function importData(inp){
+  const f=inp.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{ try{
+    const x=JSON.parse(rd.result);
+    validateImportFile(x);
+    if(!confirm("นำเข้าไฟล์นี้? ข้อมูลปัจจุบันในเครื่องจะถูกแทนที่")) return;
+    snapNow("ก่อนนำเข้าไฟล์");
+    applyImportObj(x);
   }catch(e){ alert("ไฟล์ไม่ถูกต้อง"); } };
   rd.readAsText(f); inp.value="";
 }
 function wipe(){
   if(cloud.on) alert("ระบบออนไลน์เปิดอยู่: การล้างนี้ลบเฉพาะในเครื่อง ข้อมูลบนคลาวด์จะถูกดึงกลับมาเมื่อเปิดใหม่ (ถ้าต้องการลบจริงให้ลบใน Firebase Console)");
   if(confirm("ลบข้อมูลทั้งหมด? กู้คืนไม่ได้ (ควรดาวน์โหลดไฟล์สำรองก่อน)") && confirm("ยืนยันอีกครั้ง ลบจริงๆ?")){
-    localStorage.removeItem(KEY); localStorage.removeItem(OLD); location.reload();
+    (typeof lfForget==="function"?lfForget():Promise.resolve()).finally(()=>{ localStorage.removeItem(KEY); localStorage.removeItem(OLD); location.reload(); });
   }
 }
 
@@ -3141,7 +3158,8 @@ function cloudListen(){
     });
     if(changed){
       migrateMoveBalances();
-      try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){}
+      try{ localStorage.setItem(KEY,JSON.stringify(S)); localStorage.setItem("dormSavedAt",String(Date.now())); }catch(e){}
+      if(typeof lfDirty==="function") lfDirty();
       const a=document.activeElement, typing=a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&!$("lock").contains(a)&&!$("login").contains(a);
       if(typing) setTimeout(refreshAll,4000); else refreshAll();
     }
@@ -3210,56 +3228,20 @@ let skipPaidConfirm=false;
       }
     });
   }
-  /* รับเงินแบบแตะเดียว: ติ๊ก/กดรับเงิน = บันทึกทันที แล้วมีแถบแจ้งให้ "ยกเลิก" หรือ "พิมพ์ใบเสร็จ" (ไม่มีหน้าต่างถามซ้อนหลายชั้น) */
   const sp=window.setPaid;
   if(typeof sp==="function") window.setPaid=function(id,on){
-    const h=S.hist.find(x=>x.id===id);
-    if(!h) return sp.apply(this,arguments);
-    if(on && !h.paid){
-      const before={paid:h.paid,paidDate:h.paidDate,late:h.late,rc:h.rc,note:h.note,seq:S.seq};
-      const r=sp.apply(this,arguments);
-      if(h.paid) showPayToast(id,before);
-      return r;
+    if(!skipPaidConfirm){
+      const h=S.hist.find(x=>x.id===id);
+      if(h){
+        const msg = on ? `รับเงิน ห้อง ${h.room} จำนวน ${fmt(owed(h))} บาท ใช่ไหม?` : `ยกเลิกสถานะ "จ่ายแล้ว" ของห้อง ${h.room} ใช่ไหม?`;
+        if(!confirm(msg)){ renderHist(); return; }
+      }
     }
-    const r=sp.apply(this,arguments);   // ยกเลิกจ่าย: ใช้คำถามยืนยันเดิม (ถามครั้งเดียว)
-    renderHist();                        // ถ้ากดไม่ยืนยัน ให้ช่องติ๊กกลับเป็นตามสถานะจริง
-    return r;
+    return sp.apply(this,arguments);
   };
-  window.qpPay=function(id){
-    const h=S.hist.find(x=>x.id===id); if(!h||h.paid) return;
-    window.setPaid(id,true);
-    $("qp").value=""; qpRender();
-  };
-  /* ใส่ปุ่ม "✅ รับเงิน" ในบิลค้าง (ไม่ต้องหาช่องติ๊กเล็กๆ) */
-  const hr=window.histRow;
-  if(typeof hr==="function") window.histRow=function(h,sm){
-    let s=hr.apply(this,arguments);
-    if(!h.paid && !h.movedToFinal && !(h.settlement && num(h.total)<=0)){
-      s=s.replace('<div class="btns">',`<div class="btns"><button class="sm" onclick="setPaid('${esc(h.id)}',true)">✅ รับเงิน</button>`);
-    }
-    return s;
-  };
+  const qp=window.qpPay;
+  if(typeof qp==="function") window.qpPay=function(){ skipPaidConfirm=true; try{ return qp.apply(this,arguments); } finally { skipPaidConfirm=false; } };
 })();
-let payToastT=null;
-function hidePayToast(){ const t=$("payToast"); if(t) t.classList.remove("on"); clearTimeout(payToastT); }
-function showPayToast(id,before){
-  const h=S.hist.find(x=>x.id===id); if(!h) return;
-  let t=$("payToast");
-  if(!t){ t=document.createElement("div"); t.id="payToast"; document.body.appendChild(t); }
-  t.innerHTML=`<div>✅ ห้อง <b>${esc(h.room)}</b> รับเงิน <b>${fmt(owed(h))}</b> บาทแล้ว</div>
-    <div class="pt-b"><button class="sm gray" id="ptUndo">↩️ ยกเลิก</button><button class="sm" id="ptPrint">🧾 พิมพ์ใบเสร็จ</button></div>`;
-  t.classList.add("on");
-  $("ptUndo").onclick=()=>{
-    const x=S.hist.find(y=>y.id===id); if(x){
-      x.paid=before.paid; x.paidDate=before.paidDate; x.late=before.late; x.rc=before.rc;
-      if(before.note===undefined) delete x.note; else x.note=before.note;
-      S.seq=before.seq; save(); renderHist(); renderSummary(); renderDash();
-    }
-    hidePayToast();
-  };
-  $("ptPrint").onclick=()=>{ hidePayToast(); printReceipt(id); };
-  clearTimeout(payToastT); payToastT=setTimeout(hidePayToast,10000);
-}
 
 /* ================= ตั้งค่าห้องทั้งชั้น ================= */
 let frFloors=[], frBy={};
@@ -3389,10 +3371,145 @@ function restoreSnap(i){
 })();
 renderSnaps();
 
+
+/* ================= บันทึกลงไฟล์ในคอม (File System Access API) ================= */
+const FS_OK = typeof window.showSaveFilePicker==="function" && typeof window.showOpenFilePicker==="function";
+const lf = { h:null, name:"", timer:null, busy:false, dirty:false, needPerm:false, last:"", err:"" };
+function lfDb(){ return new Promise((res,rej)=>{ const q=indexedDB.open("dormFs",1); q.onupgradeneeded=()=>q.result.createObjectStore("kv"); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
+async function lfIdb(mode,key,val){
+  const d=await lfDb();
+  return new Promise((res,rej)=>{
+    const st=d.transaction("kv",mode==="get"?"readonly":"readwrite").objectStore("kv");
+    const r = mode==="get"?st.get(key):mode==="set"?st.put(val,key):st.delete(key);
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  });
+}
+function lfPayload(){ return JSON.stringify(Object.assign({app:"dormPro",savedAt:new Date().toISOString()},S,{cfg:Object.assign({},S.cfg,{pin:""})}),null,1); }
+function lfUI(){
+  const set=(id,t)=>{ const e=$(id); if(e) e.textContent=t; };
+  set("lfName", lf.h ? (lf.name||"(ไฟล์ข้อมูล)") : "ยังไม่ได้เลือก");
+  set("lfState", !FS_OK ? "เบราว์เซอร์นี้ไม่รองรับ" : !lf.h ? "ยังไม่ได้เชื่อมไฟล์" : lf.needPerm ? "⏸️ รอการอนุญาต (กด 'เชื่อมไฟล์อีกครั้ง')" : lf.err ? "⚠️ "+lf.err : lf.dirty||lf.busy ? "⏳ กำลังบันทึก…" : lf.last ? "✅ บันทึกล่าสุด "+lf.last : "✅ เชื่อมแล้ว");
+  set("lfNote", FS_OK ? "" : "เบราว์เซอร์นี้ (เช่น Safari/Firefox/มือถือ) บันทึกลงไฟล์อัตโนมัติไม่ได้ ให้ใช้ Chrome หรือ Edge บนคอม หรือกด 'ดาวน์โหลดไฟล์สำรอง' แทน");
+  ["lfB1","lfB2"].forEach(id=>{ const b=$(id); if(b) b.disabled=!FS_OK; });
+  ["lfB3","lfB4"].forEach(id=>{ const b=$(id); if(b) b.disabled=!lf.h; });
+  const bar=$("lfBar"); if(!bar) return;
+  if(lf.h && lf.needPerm) bar.innerHTML='<div class="card"><div class="alert" style="margin:0">💻 ไฟล์ข้อมูลในคอมรอการอนุญาต <button class="sm blue" style="margin-left:6px" onclick="lfReconnect()">เชื่อมไฟล์อีกครั้ง</button></div></div>';
+  else if(FS_OK && !lf.h && S.rooms.some(r=>r.tenant) && !localStorage.getItem("dormLfHide")) bar.innerHTML='<div class="card"><div class="alert" style="margin:0">💡 แนะนำ: เก็บข้อมูลเป็นไฟล์ในคอมไว้อีกชั้น (ไม่ต้องใช้เน็ต) <button class="sm blue" style="margin-left:6px" onclick="tab(5)">ตั้งค่า</button> <button class="sm gray" onclick="localStorage.setItem(\'dormLfHide\',\'1\');lfUI()">ไม่ต้องแสดง</button></div></div>';
+  else bar.innerHTML="";
+}
+function lfDirty(){
+  if(!lf.h || lf.needPerm) return;
+  lf.dirty=true; lfUI();
+  clearTimeout(lf.timer); lf.timer=setTimeout(()=>lfWrite(false),1200);
+}
+async function lfWrite(manual){
+  if(!lf.h) { if(manual) alert("ยังไม่ได้เลือกไฟล์ข้อมูล"); return false; }
+  if(lf.busy){ lf.dirty=true; return false; }
+  lf.busy=true; clearTimeout(lf.timer);
+  try{
+    if(lf.h.queryPermission){
+      let perm=await lf.h.queryPermission({mode:"readwrite"});
+      if(perm!=="granted"){ lf.needPerm=true; lf.busy=false; lfUI(); if(manual) alert("ต้องอนุญาตให้เขียนไฟล์ก่อน กดปุ่ม 'เชื่อมไฟล์อีกครั้ง'"); return false; }
+    }
+    const w=await lf.h.createWritable();
+    await w.write(lfPayload()); await w.close();
+    lf.dirty=false; lf.err=""; lf.last=new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+    lf.busy=false; lfUI();
+    if(manual) alert("บันทึกลงไฟล์แล้ว");
+    if(lf.dirty) lfDirty();
+    return true;
+  }catch(e){
+    console.error("file save failed",e); lf.busy=false; lf.err="บันทึกลงไฟล์ไม่สำเร็จ ("+(e&&e.name||"error")+")"; lfUI();
+    if(manual) alert("บันทึกลงไฟล์ไม่สำเร็จ: "+(e&&e.message||e)); else { clearTimeout(lf.timer); lf.timer=setTimeout(()=>lfWrite(false),15000); }
+    return false;
+  }
+}
+async function lfLink(h){ lf.h=h; lf.name=h.name||""; lf.needPerm=false; lf.err=""; try{ await lfIdb("set","h",h); }catch(e){ console.warn("cannot persist handle",e); } lfUI(); }
+async function lfChoose(){
+  if(!FS_OK){ alert("เบราว์เซอร์นี้ไม่รองรับ กรุณาใช้ Chrome หรือ Edge บนคอม"); return; }
+  try{
+    const h=await window.showSaveFilePicker({suggestedName:"ข้อมูลหอพัก.json",types:[{description:"ไฟล์ข้อมูลหอพัก",accept:{"application/json":[".json"]}}]});
+    await lfLink(h);
+    if(await lfWrite(false)) alert("เชื่อมไฟล์แล้ว จากนี้ทุกครั้งที่แก้ข้อมูลจะบันทึกลงไฟล์นี้ให้เอง");
+  }catch(e){ if(e&&e.name!=="AbortError"){ alert("เลือกไฟล์ไม่สำเร็จ: "+(e.message||e)); } }
+}
+async function lfOpen(){
+  if(!FS_OK){ alert("เบราว์เซอร์นี้ไม่รองรับ กรุณาใช้ Chrome หรือ Edge บนคอม"); return; }
+  try{
+    const [h]=await window.showOpenFilePicker({types:[{description:"ไฟล์ข้อมูลหอพัก",accept:{"application/json":[".json"]}}],multiple:false});
+    const x=JSON.parse(await (await h.getFile()).text());
+    validateImportFile(x);
+    const when=x.savedAt?new Date(x.savedAt).toLocaleString("th-TH"):"ไม่ทราบเวลา";
+    if(!confirm(`โหลดข้อมูลจากไฟล์ "${h.name}" (บันทึกเมื่อ ${when})\nมี ${x.rooms.length} ห้อง · ${x.hist.length} บิล\n\nข้อมูลปัจจุบันในเครื่องจะถูกแทนที่ด้วยข้อมูลในไฟล์ ตกลงไหม?\n(ระบบเก็บจุดกู้คืนให้ก่อน)`)) return;
+    snapNow("ก่อนเปิดไฟล์ข้อมูล");
+    applyImportObj(x,true);
+    await lfLink(h); lfDirty();
+    alert("โหลดข้อมูลจากไฟล์แล้ว และเชื่อมไฟล์นี้ไว้บันทึกอัตโนมัติ");
+  }catch(e){ if(e&&e.name!=="AbortError") alert("เปิดไฟล์ไม่สำเร็จ หรือไฟล์ไม่ใช่ไฟล์ข้อมูลหอพัก"); }
+}
+async function lfReconnect(){
+  if(!lf.h) return;
+  try{
+    const p=await lf.h.requestPermission({mode:"readwrite"});
+    if(p!=="granted"){ alert("ไม่ได้รับอนุญาต ยังไม่บันทึกลงไฟล์"); return; }
+    lf.needPerm=false; await lfSync();
+  }catch(e){ alert("เชื่อมไฟล์ไม่สำเร็จ ลองเลือกไฟล์ใหม่ที่หน้า ตั้งค่า"); }
+}
+async function lfSync(){
+  try{
+    const file=await lf.h.getFile(), txt=await file.text();
+    let x=null; try{ x=JSON.parse(txt); validateImportFile(x); }catch(e){ x=null; }
+    if(!x){ await lfWrite(false); return; }
+    const fileT=Date.parse(x.savedAt)||file.lastModified||0, localT=+localStorage.getItem("dormSavedAt")||0;
+    const fileRich=x.hist.length>0 || x.rooms.some(r=>r&&String(r.tenant||"").trim());
+    const localRich=S.hist.length>0 || S.rooms.some(r=>String(r.tenant||"").trim());
+    const f=new Date(fileT).toLocaleString("th-TH"), l=localT?new Date(localT).toLocaleString("th-TH"):"ไม่มี";
+    if(fileRich && !localRich){
+      if(confirm(`พบไฟล์ข้อมูลหอพักในคอม (${x.rooms.length} ห้อง · ${x.hist.length} บิล บันทึกเมื่อ ${f}) แต่ข้อมูลในเบราว์เซอร์ยังว่าง\nโหลดจากไฟล์เลยไหม?`)){ snapNow("ก่อนโหลดจากไฟล์"); applyImportObj(x,true); lf.last=""; lfUI(); return; }
+      lf.h=null; lfUI(); alert("ไม่ได้เชื่อมไฟล์ (กันข้อมูลในไฟล์ถูกทับ)"); return;
+    }
+    if(fileT>localT+2000){
+      if(confirm(`ไฟล์ข้อมูลในคอม ใหม่กว่า ข้อมูลในเบราว์เซอร์\nไฟล์: ${f}\nเบราว์เซอร์: ${l}\n\nกด ตกลง = โหลดจากไฟล์\nกด ยกเลิก = เก็บข้อมูลในเบราว์เซอร์ไว้ (ไฟล์จะถูกเขียนทับ)`)){
+        snapNow("ก่อนโหลดจากไฟล์"); applyImportObj(x,true); return;
+      }
+    }
+    await lfWrite(false);
+  }catch(e){ console.error(e); lf.err="อ่านไฟล์ไม่ได้"; lfUI(); }
+}
+async function lfInit(){
+  lfUI();
+  if(!FS_OK) return;
+  try{
+    const h=await lfIdb("get","h"); if(!h) return;
+    lf.h=h; lf.name=h.name||"";
+    const perm=await h.queryPermission({mode:"readwrite"});
+    if(perm==="granted") await lfSync(); else { lf.needPerm=true; lfUI(); }
+  }catch(e){ console.warn("lfInit",e); }
+}
+async function lfUnlink(){
+  if(!lf.h) return;
+  if(!confirm("เลิกเชื่อมไฟล์? (ไฟล์ในคอมไม่ถูกลบ แต่ระบบจะไม่บันทึกลงไฟล์นั้นอีก)")) return;
+  await lfForget(); alert("เลิกเชื่อมแล้ว");
+}
+async function lfForget(){ clearTimeout(lf.timer); lf.h=null; lf.name=""; lf.needPerm=false; lf.dirty=false; try{ await lfIdb("del","h"); }catch(e){} lfUI(); }
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden" && lf.h && lf.dirty && !lf.needPerm) lfWrite(false); });
+window.addEventListener("beforeunload",e=>{ if(lf.h && (lf.dirty||lf.busy) && !lf.needPerm){ e.preventDefault(); e.returnValue=""; } });
+
+/* ================= ดาวน์โหลดแอปเก็บไว้ในคอม ================= */
+function downloadApp(){
+  let h=APP_HTML;
+  h=h.replace(/<script src="https:\/\/www\.gstatic\.com\/firebasejs[^"]*"><\/script>\s*/g,"");
+  h=h.replace(/const FB_EMBED = \{[^}]*\};/,"const FB_EMBED = null;");
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([h],{type:"text/html;charset=utf-8"}));
+  a.download="ระบบหอพัก-ใช้ในเครื่อง.html"; a.click();
+  alert("ดาวน์โหลดแอปแล้ว เก็บไฟล์นี้ไว้ในคอม ดับเบิลคลิกเพื่อเปิดใช้งาน\\nเปิดครั้งแรกให้ไปที่ ตั้งค่า > 'เปิดไฟล์ข้อมูลที่มีอยู่' เพื่อดึงข้อมูลเดิมมาใช้".replace(/\\n/g,"\n"));
+}
+
 /* ---------- เริ่มต้น ---------- */
 load();
 $("month").value=monthStr(); $("rpm").value=monthStr(); $("rp_date").value=todayStr();
-bindSettings(); setView(view); renderTop(); fillMonths(); applyFs(); pinState(); showLock(); qpRender(); cloudInit();
+bindSettings(); setView(view); renderTop(); fillMonths(); applyFs(); pinState(); showLock(); qpRender(); cloudInit(); lfInit();
 </script>
 </body>
 </html>
