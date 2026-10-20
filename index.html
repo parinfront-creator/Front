@@ -2142,7 +2142,7 @@ function clDoc(b, rc){
     <div class="cl-i">${rc?"วันที่รับเงิน":"พิมพ์เมื่อ วันที่"} ${stamp}<br>
       ${rc?"ได้รับเงินค่าเช่าห้อง":"เรียกเก็บค่าเช่าห้อง"} เลขห้อง <b>${esc(b.room)}</b><br>
       ตั้งแต่ วันที่ ${d1} เวลา 00:00 ถึง วันที่ ${d2} เวลา 23:59<br>
-      เพื่อชำระค่าเช่าและค่าบริการประจำเดือน${thMonth(b.month)}${rc?"":` (ครบกำหนดชำระ ${thDate(due)})`}</div>
+      เพื่อชำระค่าเช่าและค่าบริการประจำเดือน${thMonth(b.month)}</div>
     <table class="cl-tb">
       <tr class="hd"><th>ที่</th><th colspan="2" style="text-align:left">รายการ</th><th class="n">จำนวนหน่วย</th><th class="n">จำนวนเงิน</th></tr>
       <tr><td class="no">1.</td><td colspan="2">ค่าห้อง</td><td class="n">1.00</td><td class="n">${fmt(b.rent)}</td></tr>
@@ -2189,7 +2189,7 @@ function clDocNew(b, rc){
       ${rc?"ได้รับเงินจาก":"เรียกเก็บเงินจาก"} ${esc(b.tenant)||"-"}<br>
       เลขห้อง <b>${esc(b.room)}</b><br>
       ตั้งแต่ วันที่ ${d1} เวลา 00:00 ถึง วันที่ ${d2} เวลา 23:59<br>
-      เพื่อชำระค่าเช่าและค่าบริการประจำเดือน${thMonth(b.month)}${rc?"":` (ครบกำหนดชำระ ${thDate(due)})`}</div>
+      เพื่อชำระค่าเช่าและค่าบริการประจำเดือน${thMonth(b.month)}</div>
     <table class="cl-tb">
       <tr class="hd"><th>ที่</th><th colspan="2" style="text-align:left">รายการ</th><th class="n">จำนวนหน่วย</th><th class="n">จำนวนเงิน</th></tr>
       <tr><td class="no">1.</td><td colspan="2">ค่าห้อง</td><td class="n">1.00</td><td class="n">${fmt(b.rent)}</td></tr>
