@@ -1467,6 +1467,12 @@ window.QRCode.CorrectLevel={L:1,M:0,Q:3,H:2};
     body[data-mode="dark"] h2[style*="e8f4ee"] { background:#26332d !important; }
     body[data-mode="dark"] .bill, body[data-mode="dark"] #snap { color:#000; }
   }
+  /* ===== แถบแจ้งเมื่อรับเงิน (ยกเลิกได้ / พิมพ์ใบเสร็จ) ===== */
+  #payToast { position:fixed; left:12px; right:12px; bottom:14px; z-index:99999; background:#222; color:#fff; border-radius:14px; padding:12px 14px; box-shadow:0 6px 24px rgba(0,0,0,.35); display:none; font-size:16px; max-width:520px; margin:0 auto; }
+  #payToast.on { display:block; }
+  #payToast .pt-b { display:flex; gap:8px; margin-top:8px; }
+  #payToast .pt-b button { flex:1; margin:0; }
+  @media print { #payToast { display:none !important; } }
   /* ===== พิมพ์: ซ่อนหัว/ท้ายกระดาษของเบราว์เซอร์ + ลดขนาดตัวอักษรบิลให้พอดี ===== */
   @page { size:A4 portrait; margin:0; }
   @media print {
@@ -1713,17 +1719,46 @@ let curHM = "";
 
 function load(){
   try{
-    const x=JSON.parse(localStorage.getItem(KEY) || localStorage.getItem(OLD));
+    const raw=localStorage.getItem(KEY) || localStorage.getItem(OLD);
+    const x=raw?JSON.parse(raw):null;
     if(!x){ seedRooms(); }
-    if(x){ S.cfg=Object.assign(S.cfg,x.cfg||{}); S.rooms=x.rooms||[]; S.hist=x.hist||[]; S.repairs=x.repairs||[]; S.moves=x.moves||[]; S.seq=x.seq||0; }
+    if(x){
+      S.cfg=Object.assign(S.cfg,x.cfg||{});
+      S.rooms=Array.isArray(x.rooms)?x.rooms.map(raw=>{
+        const hadVacancyFlag=!!raw && typeof raw.vacant==="boolean";
+        let r=Object.assign(newRoom(String(raw&&raw.no||""),num(raw&&raw.rent)||3000),raw||{});
+        r.no=String(r.no||"").trim(); r.tenant=String(r.tenant||"");
+        // Preserve an explicit legacy vacancy choice, but never treat an unnamed room as occupied.
+        r.vacant=r.tenant.trim()?(hadVacancyFlag?r.vacant:false):true;
+        // Keep legacy readings that already differ; equal readings require explicit confirmation.
+        if(typeof r.eRead!=="boolean") r.eRead=num(r.e1)!==num(r.e0);
+        if(typeof r.wRead!=="boolean") r.wRead=num(r.w1)!==num(r.w0);
+        r.wht=!!r.wht; r.tAddr=String(r.tAddr||""); r.tTax=String(r.tTax||"");
+        return r;
+      }):[];
+      S.hist=Array.isArray(x.hist)?x.hist:[]; S.repairs=Array.isArray(x.repairs)?x.repairs:[]; S.moves=Array.isArray(x.moves)?x.moves:[]; S.seq=Number(x.seq)||0;
+      // Older backups used h.paid only. Preserve status and freeze the water minimum as a best-effort legacy snapshot.
+      // Keep svc absent on old bills so the invoice renderer can use its legacy fallback instead of forcing it to zero.
+      S.hist.forEach(h=>{ if(h && h.wmin===undefined) h.wmin=num(S.cfg.wmin); });
+      migrateMoveBalances();
+    }
     if(S.cfg.dorm==="หอพักสุขสบาย") S.cfg.dorm="ทองอนันต์ แมนชั่น";
-  }catch(e){}
+    // Persist data migration safely after the app finishes initializing.
+    if(x) try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){}
+  }catch(e){ console.error("load failed",e); }
 }
 function seedRooms(){
-  for(let f=1;f<=5;f++) for(let j=1;j<=19;j++){ if(j===10) continue; const r=newRoom(String(f*100+j),2200); S.rooms.push(r); }
+  for(let f=1;f<=5;f++) for(let j=1;j<=19;j++){ if(j===10) continue; const r=newRoom(String(f*100+j),2200); r.vacant=true; S.rooms.push(r); }
   save();
 }
-function save(){ localStorage.setItem(KEY, JSON.stringify(S)); if(typeof cloudDirty==="function") cloudDirty(); }
+let storageWarned=false;
+function save(){
+  let ok=true;
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch(e){ ok=false; if(!storageWarned){ storageWarned=true; alert("บันทึกข้อมูลลงเครื่องไม่สำเร็จ พื้นที่จัดเก็บอาจเต็มหรือถูกปิดอยู่ กรุณาดาวน์โหลดไฟล์สำรองและอย่าปิดหน้านี้จนกว่าจะตรวจสอบข้อมูล"); } console.error("localStorage save failed",e); }
+  if(typeof cloudDirty==="function") cloudDirty();
+  return ok;
+}
 
 /* ---------- วันที่ ---------- */
 const p2 = n => String(n).padStart(2,"0");
@@ -1733,12 +1768,19 @@ const pd = s => { const [y,m,d]=String(s).split("-").map(Number); return new Dat
 const thDate = d => d.toLocaleDateString("th-TH",{day:"numeric",month:"long",year:"numeric"});
 const thDateStr = s => s ? thDate(pd(s)) : "-";
 const thMonth = v => { const [y,m]=v.split("-").map(Number); return new Date(y,m-1,1).toLocaleDateString("th-TH",{month:"long",year:"numeric"}); };
-function dueDate(month){ const [y,m]=month.split("-").map(Number); return new Date(y, m, Math.min(num(S.cfg.dueDay)||5, 28)); }
+function dueDate(month){
+  const [y,m]=String(month).split("-").map(Number);
+  if(!Number.isInteger(y)||!Number.isInteger(m)||m<1||m>12) return new Date();
+  const wanted=Math.max(1,Math.min(31,Math.trunc(num(S.cfg.dueDay)||5)));
+  const last=new Date(y,m+1,0).getDate();
+  return new Date(y,m,Math.min(wanted,last));
+}
 function lateDays(month){ const due=dueDate(month), a=pd(todayStr()); return Math.max(0, Math.round((a-due)/864e5)); }
-function lateNow(h){ return num(S.cfg.lateFee)>0 ? lateDays(h.month)*num(S.cfg.lateFee) : 0; }
+function lateNow(h){ return h&&h.settlement ? 0 : (num(S.cfg.lateFee)>0 ? lateDays(h.month)*num(S.cfg.lateFee) : 0); }
 const invNo = b => "INV-"+String(b.month).replace("-","")+"-"+b.room+(b.final?"-F":"");
 const whtOf = (rent,on) => on ? Math.round(num(rent)*0.05*100)/100 : 0;
-const owed = h => (h.paid ? num(h.total)+num(h.late) : num(h.total)+lateNow(h)) - num(h.wht);
+const isOutstanding = h => !!h && !h.paid && !h.movedToFinal && !(h.settlement && num(h.total)<=0);
+const owed = h => !h || h.movedToFinal ? 0 : Math.max(0,(h.paid ? num(h.total)+num(h.late) : num(h.total)+(h.settlement?0:lateNow(h))) - num(h.wht));
 
 function bahtText(n){
   const d=["ศูนย์","หนึ่ง","สอง","สาม","สี่","ห้า","หก","เจ็ด","แปด","เก้า"], p=["","สิบ","ร้อย","พัน","หมื่น","แสน"];
@@ -1747,7 +1789,7 @@ function bahtText(n){
     let o="";
     for(let i=0;i<s.length;i++){
       const k=+s[i], pos=s.length-i-1; if(!k) continue;
-      if(pos===0&&k===1&&s.length>1) o+="เอ็ด";
+      if(pos===0&&k===1&&s.length>1&&/[1-9]/.test(s.slice(0,i))) o+="เอ็ด";
       else if(pos===1&&k===2) o+="ยี่สิบ";
       else if(pos===1&&k===1) o+="สิบ";
       else o+=d[k]+p[pos];
@@ -1762,20 +1804,34 @@ function bahtText(n){
 function crc16(s){ let c=0xFFFF; for(let i=0;i<s.length;i++){ c^=s.charCodeAt(i)<<8; for(let j=0;j<8;j++) c=(c&0x8000)?((c<<1)^0x1021)&0xFFFF:(c<<1)&0xFFFF; } return c.toString(16).toUpperCase().padStart(4,"0"); }
 const tlv = (t,v) => t + String(v.length).padStart(2,"0") + v;
 function ppPayload(id, amt){
-  id = String(id).replace(/\D/g,"");
-  const acc = id.length===13 ? tlv("02",id) : tlv("01","0066"+id.replace(/^0/,""));
+  id = String(id||"").replace(/\D/g,"");
+  const phoneOk=/^0\d{9}$/.test(id), nationalIdOk=/^\d{13}$/.test(id);
+  if(!phoneOk&&!nationalIdOk) return "";
+  const acc = nationalIdOk ? tlv("02",id) : tlv("01","0066"+id.slice(1));
   const merchant = tlv("00","A000000677010111") + acc;
-  let p = tlv("00","01") + tlv("01","12") + tlv("29",merchant) + tlv("53","764") + (amt>0 ? tlv("54",amt.toFixed(2)) : "") + tlv("58","TH") + "6304";
+  const amount=Number(amt);
+  if(!Number.isFinite(amount)||amount<0) return "";
+  let p = tlv("00","01") + tlv("01","12") + tlv("29",merchant) + tlv("53","764") + (amount>0 ? tlv("54",amount.toFixed(2)) : "") + tlv("58","TH") + "6304";
   return p + crc16(p);
 }
 function drawQRs(root){
   root.querySelectorAll(".qr").forEach(el=>{
     el.innerHTML="";
     if(typeof QRCode==="undefined"){ el.textContent="(สร้าง QR ไม่ได้)"; return; }
-    new QRCode(el,{text:ppPayload(S.cfg.pp,+el.dataset.amt),width:130,height:130,correctLevel:QRCode.CorrectLevel.M});
+    const payload=ppPayload(S.cfg.pp,+el.dataset.amt);
+    if(!payload){ el.textContent="กรุณาตรวจเลขพร้อมเพย์ (เบอร์ 10 หลัก หรือเลขประจำตัว 13 หลัก)"; return; }
+    new QRCode(el,{text:payload,width:130,height:130,correctLevel:QRCode.CorrectLevel.M});
   });
 }
 
+/* ---------- ตรวจค่าตั้งต้นก่อนสร้างยอดเงินจริง ---------- */
+function billingConfigError(){
+  const fields=[["ค่าไฟต่อหน่วย",S.cfg.er],["ค่าน้ำต่อหน่วย",S.cfg.wr],["ค่าน้ำขั้นต่ำ",S.cfg.wmin],["ค่าบริการทั่วไป",S.cfg.svc],["ค่าปรับต่อวัน",S.cfg.lateFee]];
+  for(const [label,value] of fields){
+    if(String(value??"").trim()===""||!Number.isFinite(Number(value))||Number(value)<0) return label+" ต้องเป็นตัวเลขที่ไม่ติดลบ (ไม่มีค่าให้ใส่ 0)";
+  }
+  return "";
+}
 /* ---------- คำนวณ ---------- */
 function calc(r){
   const C=S.cfg;
@@ -1801,7 +1857,7 @@ function mkBill(r, month){
   return { id:uid(), pre:true, month, room:r.no, tenant:r.tenant, rent:c.rent, e0:num(r.e0), e1:num(r.e1), eu:c.eu,
            w0:num(r.w0), w1:num(r.w1), wu:c.wu, er:num(S.cfg.er), wr:num(S.cfg.wr), ea:c.ea, wa:c.wa,
            other:c.other, total:c.total, paid:false, paidDate:"", late:0,
-           tAddr:r.tAddr||"", tTax:r.tTax||"", wht:whtOf(c.rent,r.wht), svc:num(S.cfg.svc) };
+           tAddr:r.tAddr||"", tTax:r.tTax||"", wht:whtOf(c.rent,r.wht), svc:num(S.cfg.svc), wmin:num(S.cfg.wmin) };
 }
 let flt={floor:"all",q:""};
 function floorOf(no){
@@ -1839,7 +1895,29 @@ function buildFloors(){
   alert("สร้างห้องใหม่ "+added+" ห้อง (ตั้งเป็นห้องว่างไว้ก่อน)\nต่อไป: เลือกชั้นที่ช่อง 🏢 แล้วกด '📋 กรอกผู้เช่าหลายห้องพร้อมกัน'");
 }
 const occupied = () => S.rooms.filter(r=>!r.vacant);
-const newRoom = (no,rent) => ({no,tenant:"",phone:"",line:"",plate:"",start:"",end:"",deposit:0,rent:rent||3000,e0:0,e1:0,w0:0,w1:0,other:0,lastEu:0,lastWu:0,vacant:false});
+const newRoom = (no,rent) => ({no,tenant:"",phone:"",line:"",plate:"",tAddr:"",tTax:"",wht:false,start:"",end:"",deposit:0,rent:rent||3000,e0:0,e1:0,w0:0,w1:0,eRead:false,wRead:false,other:0,lastEu:0,lastWu:0,eOld:0,wOld:0,vacant:true});
+function migrateMoveBalances(){
+  if(!Array.isArray(S.moves)||!Array.isArray(S.hist)) return;
+  S.moves.forEach(m=>{
+    const h=S.hist.find(x=>x&&x.settlement&&(String(x.id)===String(m.settlementId)||String(x.id)===String(m.id)));
+    // Only infer a missing legacy field; an explicit zero is a valid balance and must not be overwritten.
+    if(h&&num(h.total)>0&&m.refund===undefined){ m.refund=-num(h.total); m.refundPaid=true; }
+  });
+}
+function normalizeRoomRecord(raw){
+  const src=raw&&typeof raw==="object"?raw:{};
+  const r=Object.assign(newRoom(String(src.no||""),3000),src);
+  r.no=String(r.no||"").trim(); r.tenant=String(r.tenant||"");
+  for(const k of ["phone","line","plate","tAddr","tTax","start","end"]) r[k]=String(r[k]||"");
+  r.wht=!!r.wht;
+  r.rent=(src.rent!==undefined&&String(src.rent).trim()!==""&&Number.isFinite(Number(src.rent)))?Math.max(0,Number(src.rent)):3000;
+  r.deposit=(src.deposit!==undefined&&Number.isFinite(Number(src.deposit)))?Math.max(0,Number(src.deposit)):0;
+  // Keep an explicit vacancy choice from older data; force unnamed rooms to be vacant.
+  r.vacant=r.tenant.trim()?(typeof src.vacant==="boolean"?src.vacant:false):true;
+  if(typeof r.eRead!=="boolean") r.eRead=String(r.e1??"").trim()!==""&&Number.isFinite(Number(r.e1))&&Number(r.e1)>=0&&num(r.e1)!==num(r.e0);
+  if(typeof r.wRead!=="boolean") r.wRead=String(r.w1??"").trim()!==""&&Number.isFinite(Number(r.w1))&&Number(r.w1)>=0&&num(r.w1)!==num(r.w0);
+  return r;
+}
 
 /* ---------- แท็บ ---------- */
 function tab(n){
@@ -1901,10 +1979,13 @@ function renderTable(){
     <p class="hint">กด Tab เพื่อไปช่องถัดไป · ห้องว่างไม่แสดงในตาราง · แก้เลขห้อง/ข้อมูลผู้เช่าได้ในมุมมองการ์ด</p>` : '<p class="hint">ยังไม่มีห้อง กด "เพิ่มห้อง" ด้านล่าง</p>';
 }
 function updT(i,k,v){
-  S.rooms[i][k]=v; save();
+  const r=S.rooms[i]; if(!r) return; r[k]=v;
+  if(k==="e1") r.eRead=String(v).trim()!==""&&Number.isFinite(Number(v))&&Number(v)>=0;
+  if(k==="w1") r.wRead=String(v).trim()!==""&&Number.isFinite(Number(v))&&Number(v)>=0;
+  save();
   const t=$("tt"+i), w=$("tw"+i);
-  if(t) t.innerHTML="<b>"+fmt(calc(S.rooms[i]).total)+"</b>";
-  if(w) w.textContent=tblWarn(S.rooms[i]);
+  if(t) t.innerHTML="<b>"+fmt(calc(r).total)+"</b>";
+  if(w) w.textContent=tblWarn(r);
   renderDash();
 }
 function renderRooms(){
@@ -1919,7 +2000,7 @@ function renderRooms(){
     const head=`<div class="top"><b>ห้อง ${esc(r.no)||"?"} ${r.vacant?'<span class="tag gray">ว่าง</span>':""}</b>
       <div class="btns" style="margin:0">${r.vacant?"":`<button class="gray sm" onclick="openMoveOut(${i})">🚪 ย้ายออก</button>`}<button class="red sm" onclick="delRoom(${i})">ลบ</button></div></div>`;
     const base=`<div class="g2">
-        <div><label>เลขห้อง</label><input value="${esc(r.no)}" oninput="upd(${i},'no',this.value)"></div>
+        <div><label>เลขห้อง</label><input value="${esc(r.no)}" onchange="changeRoomNo(${i},this.value)"></div>
         <div><label>ค่าห้อง/เดือน</label><input type="number" inputmode="decimal" value="${esc(r.rent)}" oninput="upd(${i},'rent',this.value)"></div>
       </div>
       <label class="chk"><input type="checkbox" ${r.vacant?"checked":""} onchange="setVacant(${i},this.checked)"> ห้องว่าง (ไม่ออกบิล)</label>`;
@@ -1963,14 +2044,33 @@ function renderRooms(){
     })();
   }).join("") || (S.rooms.length ? '<p class="hint">ไม่พบห้อง (ลองเปลี่ยนชั้นหรือล้างช่องค้นหา)</p>' : '<div class="alert">👋 เริ่มต้นใช้งาน: 1) แท็บ ⚙️ตั้งค่า ใส่ชื่อหอ/ค่าไฟ/ค่าน้ำ/พร้อมเพย์ → 2) กด "🏢 สร้างห้องทั้งตึกตามชั้น" ด้านล่าง → 3) กด "📋 กรอกผู้เช่าหลายห้อง" ทีละชั้น</div>')) + '</div>';
 }
+function changeRoomNo(i,value){
+  const r=S.rooms[i], next=String(value||"").trim();
+  if(!r) return;
+  if(!next){ alert("เลขห้องห้ามว่าง"); renderRooms(); return; }
+  if(next!==String(r.no) && S.rooms.some((x,j)=>j!==i&&String(x.no)===next)){ alert("มีเลขห้องนี้อยู่แล้ว"); renderRooms(); return; }
+  if(next!==String(r.no) && (S.hist.some(h=>String(h.room)===String(r.no)) || S.moves.some(m=>String(m.room)===String(r.no)))){ alert("ห้องนี้มีประวัติบิล/ย้ายออกแล้ว จึงเปลี่ยนเลขตรงๆ ไม่ได้ เพื่อไม่ให้ประวัติเดิมหายจากการค้นหา"); renderRooms(); return; }
+  r.no=next; save(); renderRooms(); renderTop();
+}
 function upd(i,k,v){
-  S.rooms[i][k]=v; save();
+  const r=S.rooms[i]; if(!r) return;
+  if(k==="no"){ r._pendingNo=v; return; }
+  r[k]=v;
+  if(k==="e1") r.eRead=String(v).trim()!=="" && Number.isFinite(Number(v)) && Number(v)>=0;
+  if(k==="w1") r.wRead=String(v).trim()!=="" && Number.isFinite(Number(v)) && Number(v)>=0;
+  if(k==="e0") r.eRead=false;
+  if(k==="w0") r.wRead=false;
+  save();
   const el=$("sum"+i); if(el) el.innerHTML=roomSum(i);
   if(k==="end"||k==="tenant") renderTop(); else renderDash();
 }
 function setWht(i,on){ S.rooms[i].wht=on; save(); renderRooms(); }
-function setVacant(i,on){ S.rooms[i].vacant=on; save(); renderRooms(); renderTop(); }
-function addRoom(){ S.rooms.push(newRoom("",S.rooms[0]?S.rooms[0].rent:3000)); save(); renderRooms(); renderTop(); }
+function setVacant(i,on){
+  const r=S.rooms[i]; if(!r) return;
+  if(on && !r.vacant){ alert("เพื่อรักษาประวัติและยอดค้าง กรุณาใช้ปุ่ม 'ย้ายออก' และสรุปเงินประกันแทนการติ๊กห้องว่างโดยตรง"); renderRooms(); return; }
+  if(!on && r.vacant){ alert("กรุณากด 'ย้ายเข้า' เพื่อบันทึกผู้เช่าและเลขมิเตอร์วันเข้า"); renderRooms(); return; }
+}
+function addRoom(){ const r=newRoom("",S.rooms[0]?S.rooms[0].rent:3000); r.vacant=true; S.rooms.push(r); save(); renderRooms(); renderTop(); }
 function addRooms(){
   const s=prompt("พิมพ์เลขห้องที่ต้องการเพิ่ม คั่นด้วยเว้นวรรค เช่น 101 102 103 201 202");
   if(!s) return;
@@ -1979,12 +2079,22 @@ function addRooms(){
   S.rooms.sort((a,b)=>String(a.no).localeCompare(String(b.no),"th",{numeric:true}));
   save(); renderRooms(); renderTop();
 }
-function delRoom(i){ if(confirm("ลบห้องนี้? (ประวัติบิลเก่ายังอยู่)")){ S.rooms.splice(i,1); save(); renderRooms(); renderTop(); } }
+function delRoom(i){
+  const r=S.rooms[i]; if(!r) return;
+  if(!r.vacant){ alert("ลบห้องที่มีผู้เช่าไม่ได้ กรุณาย้ายออกและสรุปบัญชีก่อน"); return; }
+  if(S.hist.some(h=>String(h.room)===String(r.no)) || S.moves.some(m=>String(m.room)===String(r.no))){ alert("ห้องนี้มีประวัติบิลหรือย้ายออกอยู่แล้ว จึงลบไม่ได้เพื่อรักษาประวัติทางการเงิน"); return; }
+  if(confirm("ลบห้องว่างนี้จริงหรือไม่?")){ S.rooms.splice(i,1); save(); renderRooms(); renderTop(); }
+}
 
 /* ---------- ใบบิล / ใบเสร็จ ---------- */
+function safeLogoSrc(){
+  const s=String(S.cfg&&S.cfg.logo||"");
+  if(s.length>3000000 || !/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=\r\n]+$/i.test(s)) return "";
+  return s;
+}
 function docHead(title, meta){
   const C=S.cfg;
-  return `<div class="dh"><div class="dl">${C.logo?`<img src="${C.logo}">`:""}<div><div class="dn">${esc(C.dorm)}</div><div class="da">${esc(C.addr)}</div>${C.taxId?`<div class="da">เลขประจำตัวผู้เสียภาษี ${esc(C.taxId)}</div>`:""}</div></div>
+  return `<div class="dh"><div class="dl">${safeLogoSrc()?`<img src="${safeLogoSrc()}">`:""}<div><div class="dn">${esc(C.dorm)}</div><div class="da">${esc(C.addr)}</div>${C.taxId?`<div class="da">เลขประจำตัวผู้เสียภาษี ${esc(C.taxId)}</div>`:""}</div></div>
     <div class="dr"><div class="dt">${title}</div>${meta||""}</div></div>`;
 }
 function itemRows(b, late){
@@ -2012,7 +2122,7 @@ function clDoc(b, rc){
     <td class="n"><br>${o}<br>${n}<br>${u}</td><td class="n"><br><br><br>${fmt(amt)}</td></tr>`;
   const title = rc ? "ใบเสร็จรับเงิน" : "ใบแจ้งหนี้";
   const docNo = rc ? (b.rc||"-") : invNo(b);
-  const hd=`<div class="cl-h">${C.logo?`<img src="${C.logo}" style="max-height:56px;max-width:90px">`:""}<div style="flex:1"><div class="cl-n">${esc(C.dorm)}</div>${C.addr?`<div class="da">${esc(C.addr)}</div>`:""}${C.taxId?`<div class="da">เลขประจำตัวผู้เสียภาษี ${esc(C.taxId)}</div>`:""}</div>
+  const hd=`<div class="cl-h">${safeLogoSrc()?`<img src="${safeLogoSrc()}" style="max-height:56px;max-width:90px">`:""}<div style="flex:1"><div class="cl-n">${esc(C.dorm)}</div>${C.addr?`<div class="da">${esc(C.addr)}</div>`:""}${C.taxId?`<div class="da">เลขประจำตัวผู้เสียภาษี ${esc(C.taxId)}</div>`:""}</div>
     <div class="dr"><div class="dt">${title}</div><div>เลขที่ <b>${esc(docNo)}</b></div>${rc?`<div>อ้างอิงใบแจ้งหนี้ ${invNo(b)}</div><div class="paidtag">✔ ชำระแล้ว</div>`:""}</div></div>`;
   const o=num(b.other);
   return `<div class="bill cl">${hd}
@@ -2050,7 +2160,7 @@ function clDocNew(b, rc){
   const title=rc ? "ใบเสร็จรับเงิน" : "ใบแจ้งหนี้";
   const docNo=rc ? (b.rc||"-") : invNo(b);
   const hd=`<div class="cl-h" style="flex-direction:column;align-items:center;text-align:center;border-bottom:0">
-    ${C.logo?`<img src="${C.logo}" style="max-height:56px;max-width:90px">`:""}
+    ${safeLogoSrc()?`<img src="${safeLogoSrc()}" style="max-height:56px;max-width:90px">`:""}
     <div class="cl-t">${title}</div><div class="cl-n">${esc(C.dorm)}</div>
     ${C.addr?`<div class="da">${esc(C.addr)}</div>`:""}${C.taxId?`<div class="da">เลขประจำตัวผู้เสียภาษี ${esc(C.taxId)}</div>`:""}
     <div style="align-self:flex-end;text-align:right;font-size:13px">เลขที่ <b>${esc(docNo)}</b>${rc?` · อ้างอิง ${invNo(b)}`:""}${rc?`<div class="paidtag">✔ ชำระแล้ว</div>`:""}</div></div>`;
@@ -2085,9 +2195,9 @@ function clDocNew(b, rc){
     ${rc?`<div class="fine">เอกสารนี้ไม่ใช่ใบกำกับภาษี</div>`:""}
   </div>`;
 }
-const billHTML = b => clDocNew(b,false);
+const billHTML = b => b&&b.settlement?settlementDoc(b,false):clDocNew(b,false);
 /* (ตัวเดิมเก็บไว้) const billHTMLOld = b => clDoc(b,false); */
-const receiptHTML = h => clDocNew(h,true);
+const receiptHTML = h => h&&h.settlement?settlementDoc(h,true):clDocNew(h,true);
 function printDocs(list, noPair){
   if(!list.length){ alert("ยังไม่มีห้อง/บิล"); return; }
   const box=$("print");
@@ -2140,7 +2250,11 @@ function remind(id){ copyText(remindText(S.hist.find(h=>h.id===id))); }
 
 /* ---------- โหมดจดมิเตอร์ทีละห้อง ---------- */
 let wkList=[], wkPos=0;
-function isRead(r){ return num(r.e1)!==num(r.e0) || num(r.w1)!==num(r.w0); }
+function isRead(r){
+  if(!r || !r.eRead || !r.wRead) return false;
+  const e=String(r.e1??"").trim(), w=String(r.w1??"").trim();
+  return e!=="" && w!=="" && Number.isFinite(Number(e)) && Number.isFinite(Number(w)) && Number(e)>=0 && Number(w)>=0;
+}
 const hasBill = (r,m) => S.hist.some(h=>h.month===m && h.room===r.no && !h.final);
 function openWalk(unreadOnly){
   wkList=roomOrder().filter(i=>!S.rooms[i].vacant && (unreadOnly!==true || (!isRead(S.rooms[i]) && !hasBill(S.rooms[i],curMonth()))));
@@ -2153,9 +2267,9 @@ function renderWalk(){
     <div class="hint">ห้องที่ ${wkPos+1} จาก ${wkList.length}</div>
     <h2 style="font-size:30px;margin:4px 0">ห้อง ${esc(r.no)}</h2><div>${esc(r.tenant)||"-"}</div>
     <label>⚡ ไฟ — เลขเดิม ${esc(r.e0)}</label>
-    <input id="wk_e" class="big" type="number" inputmode="decimal" placeholder="เลขมิเตอร์ไฟล่าสุด" value="${num(r.e1)===num(r.e0)?"":esc(r.e1)}" oninput="wkUpd()" onkeydown="if(event.key==='Enter')$('wk_w').focus()">
+    <input id="wk_e" class="big" type="number" inputmode="decimal" placeholder="เลขมิเตอร์ไฟล่าสุด" value="${r.eRead?esc(r.e1):""}" oninput="wkUpd()" onkeydown="if(event.key==='Enter')$('wk_w').focus()">
     <label>💧 น้ำ — เลขเดิม ${esc(r.w0)}</label>
-    <input id="wk_w" class="big" type="number" inputmode="decimal" placeholder="เลขมิเตอร์น้ำล่าสุด" value="${num(r.w1)===num(r.w0)?"":esc(r.w1)}" oninput="wkUpd()" onkeydown="if(event.key==='Enter')wkNext()">
+    <input id="wk_w" class="big" type="number" inputmode="decimal" placeholder="เลขมิเตอร์น้ำล่าสุด" value="${r.wRead?esc(r.w1):""}" oninput="wkUpd()" onkeydown="if(event.key==='Enter')wkNext()">
     <div class="sum" id="wk_sum"></div>
     <div class="g2" style="margin-top:12px"><button class="gray" onclick="wkPrev()">◀ ก่อนหน้า</button><button onclick="wkNext()">${last?"✅ เสร็จ":"ถัดไป ▶"}</button></div>
     <button class="full gray" onclick="wkClose()">ปิด</button></div>`;
@@ -2163,12 +2277,15 @@ function renderWalk(){
   setTimeout(()=>{ const e=$("wk_e"); if(e&&e.focus) e.focus(); },50);
 }
 function wkUpd(){
-  const i=wkList[wkPos], r=S.rooms[i], e=$("wk_e").value, w=$("wk_w").value;
-  if(e!=="") r.e1=e;
-  if(w!=="") r.w1=w;
+  const i=wkList[wkPos], r=S.rooms[i]; if(!r) return;
+  const e=$("wk_e").value, w=$("wk_w").value;
+  if(e.trim()!=="" && Number.isFinite(Number(e)) && Number(e)>=0){ r.e1=e; r.eRead=true; } else r.eRead=false;
+  if(w.trim()!=="" && Number.isFinite(Number(w)) && Number(w)>=0){ r.w1=w; r.wRead=true; } else r.wRead=false;
   save(); $("wk_sum").innerHTML=roomSum(i); renderDash();
 }
 function wkNext(){
+  const e=$("wk_e").value.trim(), w=$("wk_w").value.trim();
+  if(e===""||w===""||!Number.isFinite(Number(e))||!Number.isFinite(Number(w))||Number(e)<0||Number(w)<0){ alert("กรุณาจดเลขมิเตอร์ไฟและน้ำให้ครบ หากใช้ 0 หน่วยให้กรอกเลขเดิมซ้ำได้"); return; }
   wkUpd();
   if(wkPos<wkList.length-1){ wkPos++; renderWalk(); }
   else { const n=wkList.length; wkClose(); alert("จดมิเตอร์ครบ "+n+" ห้องแล้ว ✓"); }
@@ -2177,13 +2294,19 @@ function wkPrev(){ wkUpd(); if(wkPos>0){ wkPos--; renderWalk(); } }
 function wkClose(){ $("modal").classList.remove("on"); $("modal").innerHTML=""; renderRooms(); renderTop(); }
 
 /* ---------- ส่งออก Excel (CSV) ---------- */
-function csvCell(v){ v=String(v ?? ""); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }
+function csvCell(v){
+  let s=String(v ?? "");
+  // Prevent spreadsheet formula injection in cells originating from user-controlled text.
+  if(/^[\s\u0000-\u001f]*[=+@]/.test(s) || /^[\s\u0000-\u001f]*-[^0-9]/.test(s)) s="'"+s;
+  return /[",\r\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
 function exportCSV(all){
   const list=S.hist.filter(h=>all||h.month===curHM).sort((a,b)=>a.month.localeCompare(b.month)||String(a.room).localeCompare(String(b.room),"th",{numeric:true}));
   if(!list.length){ alert("ยังไม่มีข้อมูลบิล ปิดเดือนอย่างน้อย 1 ครั้งก่อน"); return; }
-  const head=["เดือน","ห้อง","ผู้เช่า","ค่าห้อง","ไฟก่อน","ไฟหลัง","หน่วยไฟ","ค่าไฟ","น้ำก่อน","น้ำหลัง","หน่วยน้ำ","ค่าน้ำ","ค่าอื่นๆ","ค่าปรับ","รวม","สถานะ","วันที่จ่าย","เลขใบเสร็จ","เลขที่ใบแจ้งหนี้","หัก ณ ที่จ่าย"];
-  const rows=list.map(h=>{ const late=h.paid?num(h.late):lateNow(h);
-    return [h.month,h.room,h.tenant,h.rent,h.e0,h.e1,h.eu,h.ea,h.w0,h.w1,h.wu,h.wa,h.other,late,num(h.total)+late,h.paid?"จ่ายแล้ว":"ค้างจ่าย",h.paidDate,h.rc||"",invNo(h),num(h.wht)]; });
+  const head=["เดือน","ห้อง","ผู้เช่า","ค่าห้อง","ไฟก่อน","ไฟหลัง","หน่วยไฟ","ค่าไฟ","น้ำก่อน","น้ำหลัง","หน่วยน้ำ","ค่าน้ำ","ค่าอื่นๆ","ค่าปรับ","ยอดก่อนหักภาษี","ยอดสุทธิที่ต้องชำระ","สถานะ","วันที่จ่าย","เลขใบเสร็จ","เลขที่ใบแจ้งหนี้","หัก ณ ที่จ่าย"];
+  const rows=list.map(h=>{ const late=h.movedToFinal?0:(h.paid?num(h.late):lateNow(h));
+    const currentDue=h.movedToFinal?0:num(h.total)+late-num(h.wht);
+    return [h.month,h.room,h.tenant,h.rent,h.e0,h.e1,h.eu,h.ea,h.w0,h.w1,h.wu,h.wa,h.other,late,num(h.total)+late,currentDue,h.movedToFinal?"รวมในบัญชีย้ายออก":(h.paid?"จ่ายแล้ว":"ค้างจ่าย"),h.paidDate,h.rc||"",invNo(h),num(h.wht)]; });
   const csv="﻿"+[head,...rows].map(r=>r.map(csvCell).join(",")).join("\r\n");
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
   a.download=`บิลหอพัก-${all?"ทุกเดือน":curHM}.csv`; a.click();
@@ -2192,19 +2315,40 @@ function exportCSV(all){
 /* ---------- ปิดเดือน ---------- */
 function closeMonth(){
   const month=curMonth(), all=occupied();
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)){ alert("กรุณาเลือกเดือนให้ถูกต้องก่อนปิดเดือน"); return; }
+  const rateErr=billingConfigError(); if(rateErr){ alert("ยังปิดเดือนไม่ได้: "+rateErr); return; }
   if(!all.length){ alert("ยังไม่มีห้องที่มีผู้เช่า"); return; }
+  const closedMonths=[...new Set(S.hist.filter(h=>h.month&& !h.final).map(h=>h.month))].sort();
+  if(closedMonths.length){
+    const latest=closedMonths[closedMonths.length-1];
+    if(month<latest){ alert("ปิดเดือนได้ตามลำดับเวลาเท่านั้น เดือนล่าสุดที่มีบิลคือ "+thMonth(latest)); return; }
+    if(month>latest){ const [y,m]=latest.split("-").map(Number), nx=new Date(y,m,1), expected=nx.getFullYear()+"-"+p2(nx.getMonth()+1);
+      if(month!==expected && !confirm(`พบช่องว่างระหว่างเดือนล่าสุดที่มีบิล (${thMonth(latest)}) กับเดือนที่กำลังปิด (${thMonth(month)}).
+อาจเป็นเดือนที่ไม่มีผู้เช่า หรืออาจลืมปิดเดือน ${thMonth(expected)}
+ตรวจสอบแล้วต้องการปิดต่อหรือไม่?`)) return;
+    }
+  }
   const occ=all.filter(r=>!S.hist.some(h=>h.month===month && h.room===r.no && !h.final));
   if(!occ.length){ alert("เดือน "+thMonth(month)+" ปิดไปแล้ว\n(ถ้าปิดซ้ำ ตัวเลขจะผิด) ถ้าจะทำเดือนต่อไป ให้เปลี่ยนช่องเลือกเดือนด้านบนก่อน"); return; }
+
+  const missingName=occ.filter(r=>!String(r.tenant||"").trim());
+  if(missingName.length){ alert("ห้องที่ถูกตั้งเป็นมีผู้เช่าแต่ไม่มีชื่อ: "+missingName.slice(0,10).map(r=>r.no).join(", ")+" กรุณาแก้สถานะห้องก่อนปิดเดือน"); return; }
   const miss=occ.filter(r=>!isRead(r));
-  if(miss.length && !confirm(`ยังไม่ได้จดมิเตอร์ ${miss.length} ห้อง (${miss.slice(0,8).map(r=>r.no).join(", ")}${miss.length>8?" ...":""})\nยังจะปิดเดือนไหม?`)) return;
-  if(occ.some(r=>calc(r).errE||calc(r).errW) && !confirm("มีห้องที่เลขมิเตอร์ผิดปกติ ยังจะปิดเดือนไหม?")) return;
+  if(miss.length){ alert(`ยังปิดเดือนไม่ได้ เพราะยังไม่ได้ยืนยันเลขมิเตอร์ไฟและน้ำครบ ${miss.length} ห้อง (${miss.slice(0,8).map(r=>r.no).join(", ")}${miss.length>8?" ...":""})
+กรุณาจดให้ครบก่อน โดยห้องที่ใช้ 0 หน่วยให้กรอกเลขเดิมซ้ำ`); return; }
+  const invalidReading=occ.some(r=>[
+    ["เลขไฟก่อนหน้า",r.e0],["เลขไฟล่าสุด",r.e1],["เลขน้ำก่อนหน้า",r.w0],["เลขน้ำล่าสุด",r.w1]
+  ].some(([k,v])=>String(v??"").trim()===""||!Number.isFinite(Number(v))||Number(v)<0)||calc(r).errE||calc(r).errW);
+  if(invalidReading){ alert("มีเลขมิเตอร์ว่างหรือผิดรูปแบบ กรุณากรอกเลขไฟ/น้ำทั้งก่อนหน้าและล่าสุดเป็นตัวเลขไม่ติดลบ และตรวจเลขวนรอบ/เปลี่ยนมิเตอร์ก่อนปิดเดือน"); return; }
+  if(occ.some(r=>String(r.rent??"").trim()===""||!Number.isFinite(Number(r.rent))||num(r.rent)<0||!Number.isFinite(Number(r.other))||String(r.other??"").trim()===""||num(r.other)<0)){ alert("ค่าห้องและค่าอื่นๆ ต้องกรอกเป็นตัวเลขและไม่ติดลบ (ไม่มีค่าอื่นให้ใส่ 0)"); return; }
+
   if(!confirm(`ปิดเดือน ${thMonth(month)}?\nบิลจะถูกบันทึกประวัติ และเลขล่าสุดจะกลายเป็นเลขก่อนหน้า`)) return;
   occ.forEach(r=>{
     const c=calc(r), b=mkBill(r,month); delete b.pre;
     const old=S.hist.find(h=>h.month===month && h.room===r.no && !h.final);
     if(old){ b.paid=old.paid; b.paidDate=old.paidDate; b.late=old.late; b.rc=old.rc; S.hist=S.hist.filter(h=>h!==old); }
     S.hist.push(b);
-    r.lastEu=c.eu; r.lastWu=c.wu; r.e0=r.e1; r.w0=r.w1; r.other=0; r.eOld=0; r.wOld=0;
+    r.lastEu=c.eu; r.lastWu=c.wu; r.e0=r.e1; r.w0=r.w1; r.eRead=false; r.wRead=false; r.other=0; r.eOld=0; r.wOld=0;
   });
   save();
   const [yy,mm]=month.split("-").map(Number); const nx=new Date(yy,mm,1);
@@ -2226,24 +2370,34 @@ function setHM(v){ curHM=v; fillMonths(); }
 function nextRc(){ S.seq=(S.seq||0)+1; return "RC-"+String(S.seq).padStart(4,"0"); }
 function markPaid(h,note){ h.late=lateNow(h); h.paid=true; h.paidDate=todayStr(); if(!h.rc) h.rc=nextRc(); if(note) h.note=note; }
 function setPaid(id,on){
-  const h=S.hist.find(x=>x.id===id);
-  if(on) markPaid(h); else { h.paid=false; h.paidDate=""; h.late=0; }
-  save(); renderHist(); renderSummary();
+  const h=S.hist.find(x=>x.id===id); if(!h) return;
+  if(h.movedToFinal){ alert("บิลนี้ถูกรวมในบัญชีย้ายออกแล้ว ไม่ควรรับเงินซ้ำจากบิลเดิม"); return; }
+  if(h.settlement && num(h.total)<=0){ alert("บัญชีย้ายออกยอดคงเหลือเป็นศูนย์ จึงไม่มีเงินให้รับในบิลนี้"); return; }
+  if(on){ if(!h.paid) markPaid(h); }
+  else {
+    if(h.paid && !confirm("ยกเลิกสถานะจ่ายแล้วของบิลนี้ใช่ไหม? ใบเสร็จที่เคยออกแล้วจะไม่ถือเป็นหลักฐานรับเงินหลังจากนี้")) return;
+    if(h.paid && h.rc) h.note=[h.note,"ยกเลิกใบเสร็จ "+h.rc+" วันที่ "+todayStr()].filter(Boolean).join(" · ");
+    h.paid=false; h.paidDate=""; h.late=0; h.rc="";
+  }
+  save(); renderHist(); renderSummary(); renderDash();
 }
 function histRow(h, showMonth){
-  const late=h.paid?num(h.late):lateNow(h), g=num(h.total)+late-num(h.wht);
+  const late=h.settlement?0:(h.paid?num(h.late):lateNow(h)), g=owed(h);
   const ld=late&&num(S.cfg.lateFee)?Math.round(late/num(S.cfg.lateFee)):0;
-  const status=h.paid
-    ? `<span class="paid">จ่ายแล้ว ${thDateStr(h.paidDate)}${late?` (รวมค่าปรับ ${fmt(late)})`:""}${h.rc?` · ${esc(h.rc)}`:""}</span>${h.note?`<br><span class="hint">${esc(h.note)}</span>`:""}`
-    : `<span class="unpaid">ค้างจ่าย</span> <span class="hint">ครบกำหนด ${thDate(dueDate(h.month))}</span>${ld?`<br><span class="unpaid">เลยกำหนด ${ld} วัน ค่าปรับ ${fmt(late)}</span>`:""}`;
+  if(h.movedToFinal){
+    return `<div class="hrow"><div class="row0"><div class="info">ห้อง ${esc(h.room)} · ${esc(h.tenant)||"-"}${showMonth?`<br><span class="hint">${thMonth(h.month)}</span>`:""}<br><span class="hint">รวมยอดในบัญชีย้ายออกแล้ว · ไม่ต้องรับชำระจากบิลเดิม</span></div><div class="amt">${fmt(num(h.total))}</div></div><div class="btns"><button class="sm gray" onclick="printHist('${esc(h.id)}')">🖨️ ดูบิลเดิม</button></div></div>`;
+  }
+  const status = h.paid
+    ? `<span class="paid">${h.settlement&&num(h.total)===0?"ปิดบัญชีแล้ว (ไม่มีเงินเรียกเก็บ)":"จ่ายแล้ว "+thDateStr(h.paidDate)}${late?` (รวมค่าปรับ ${fmt(late)})`:""}${h.rc?` · ${esc(h.rc)}`:""}</span>${h.note?`<br><span class="hint">${esc(h.note)}</span>`:""}`
+    : `<span class="unpaid">${h.settlement?"ยอดย้ายออกคงค้าง":"ค้างจ่าย"}</span> <span class="hint">${h.settlement?"":`ครบกำหนด ${thDate(dueDate(h.month))}`}</span>${ld?`<br><span class="unpaid">เลยกำหนด ${ld} วัน ค่าปรับ ${fmt(late)}</span>`:""}`;
   const btns = h.paid
-    ? `<button class="sm" onclick="printReceipt('${h.id}')">🧾 พิมพ์ใบเสร็จ</button><button class="sm blue" onclick="shareReceipt('${h.id}')">🖼️ รูปใบเสร็จ</button><button class="sm gray" onclick="printHist('${h.id}')">🖨️ บิล</button>`
-    : `<button class="sm amber" onclick="remind('${h.id}')">💬 ข้อความทวง</button><button class="sm" onclick="printHist('${h.id}')">🖨️ บิล</button><button class="sm blue" onclick="shareHist('${h.id}')">🖼️ รูปบิล</button>`;
+    ? `${h.settlement&&num(h.total)===0?"":`<button class="sm" onclick="printReceipt('${esc(h.id)}')">🧾 พิมพ์ใบเสร็จ</button><button class="sm blue" onclick="shareReceipt('${esc(h.id)}')">🖼️ รูปใบเสร็จ</button>`}<button class="sm gray" onclick="printHist('${esc(h.id)}')">🖨️ ${h.settlement?"สรุปบัญชีย้ายออก":"บิล"}</button>`
+    : `<button class="sm amber" onclick="remind('${esc(h.id)}')">💬 ข้อความทวง</button><button class="sm" onclick="printHist('${esc(h.id)}')">🖨️ ${h.settlement?"สรุปบัญชีย้ายออก":"บิล"}</button>${h.settlement?"":`<button class="sm blue" onclick="shareHist('${esc(h.id)}')">🖼️ รูปบิล</button>`}`;
   return `<div class="hrow"><div class="row0">
-    <input type="checkbox" ${h.paid?"checked":""} onchange="setPaid('${h.id}',this.checked)">
-    <div class="info">ห้อง ${esc(h.room)} · ${esc(h.tenant)||"-"}${h.final?'<span class="tag">บิลสุดท้าย</span>':""}${showMonth?`<br><span class="hint">${thMonth(h.month)}</span>`:""}<br>${status}</div>
+    <input type="checkbox" ${h.paid?"checked":""} onchange="setPaid('${esc(h.id)}',this.checked)" ${h.settlement&&num(h.total)===0?"disabled":""}>
+    <div class="info">ห้อง ${esc(h.room)} · ${esc(h.tenant)||"-"}${h.final?'<span class="tag">บิลสุดท้าย</span>':""}${h.settlement?'<span class="tag">สรุปย้ายออก</span>':""}${showMonth?`<br><span class="hint">${thMonth(h.month)}</span>`:""}<br>${status}</div>
     <div class="amt">${fmt(g)}</div></div>
-    <div class="btns">${btns}${h.final?"":`<button class="sm gray" onclick="openEditBill('${h.id}')">✏️ แก้ไข</button>`}</div></div>`;
+    <div class="btns">${btns}${h.final||h.settlement?"":`<button class="sm gray" onclick="openEditBill('${esc(h.id)}')">✏️ แก้ไข</button>`}</div></div>`;
 }
 let pf={floor:"all",q:""};
 function hvis(h){
@@ -2256,24 +2410,25 @@ function renderHist(){
   const fs=[...new Set(S.hist.map(h=>floorOf(h.room)).concat(S.rooms.map(r=>floorOf(r.no))))].sort((a,b)=>(+a||0)-(+b||0));
   if(pf.floor!=="all" && !fs.includes(pf.floor)) pf.floor="all";
   $("pFloor").innerHTML='<option value="all">ทุกชั้น</option>'+fs.map(f=>`<option value="${f}" ${f===pf.floor?"selected":""}>ชั้น ${f}</option>`).join("");
-  const unAll=S.hist.filter(h=>!h.paid), un=unAll.filter(hvis).sort((a,b)=>a.month.localeCompare(b.month)||String(a.room).localeCompare(String(b.room),"th",{numeric:true}));
+  const unAll=S.hist.filter(isOutstanding), un=unAll.filter(hvis).sort((a,b)=>a.month.localeCompare(b.month)||String(a.room).localeCompare(String(b.room),"th",{numeric:true}));
   $("allUnpaid").textContent = fmt(unAll.reduce((s,h)=>s+owed(h),0)) + " บาท" + (un.length!==unAll.length ? ` (แสดง ${un.length}/${unAll.length} บิล)` : ` (${unAll.length} บิล)`);
   $("unpaidList").innerHTML = un.map(h=>histRow(h,true)).join("") || '<p class="hint">ไม่มียอดค้าง 🎉</p>';
   $("histList").innerHTML = S.hist.filter(h=>h.month===curHM && hvis(h)).sort((a,b)=>String(a.room).localeCompare(String(b.room),"th",{numeric:true})).map(h=>histRow(h,false)).join("") || '<p class="hint">ยังไม่มีบิลในประวัติ</p>';
-  $("moveList").innerHTML = S.moves.slice().reverse().map(m=>`<div class="stat"><span>${thDateStr(m.date)} · ห้อง ${esc(m.room)} ${esc(m.tenant)}</span><b class="${m.refund>=0?"paid":"unpaid"}">${m.refund>=0?"คืน":"เก็บเพิ่ม"} ${fmt(Math.abs(m.refund))}</b></div>`).join("") || '<p class="hint">ยังไม่มีประวัติ</p>';
+  $("moveList").innerHTML = S.moves.slice().reverse().map(m=>`<div class="stat"><span>${thDateStr(m.date)} · ห้อง ${esc(m.room)} ${esc(m.tenant)}${num(m.refund)>0?`<br><span class="hint">${m.refundPaid?"คืนเงินประกันแล้ว "+thDateStr(m.refundPaidDate):"รอคืนเงินประกัน"}</span>`:""}</span><span style="text-align:right"><b class="${m.refund>=0?"paid":"unpaid"}">${m.refund>=0?"คืน":"เก็บเพิ่ม"} ${fmt(Math.abs(m.refund))}</b>${num(m.refund)>0&&!m.refundPaid?`<br><button class="sm" onclick="markRefunded('${esc(m.id)}')">บันทึกว่าคืนแล้ว</button>`:""}</span></div>`).join("") || '<p class="hint">ยังไม่มีประวัติ</p>';
 }
 
 /* ---------- ย้ายออก / คืนเงินประกัน ---------- */
 let moIdx=-1;
 function openMoveOut(i){
   moIdx=i; const r=S.rooms[i];
+  const alreadyBilled=S.hist.some(h=>String(h.room)===String(r.no)&&h.month===monthStr()&&!h.final&&!h.settlement&&!h.movedToFinal);
   const f=(id,label,val,type)=>`<div><label>${label}</label><input id="${id}" type="${type||"number"}" inputmode="decimal" value="${esc(val)}" oninput="moRender()"></div>`;
   $("modal").innerHTML=`<div class="mbox"><h2>🚪 ย้ายออก ห้อง ${esc(r.no)} ${esc(r.tenant)}</h2>
-    <p class="hint">กรอกเลขมิเตอร์วันย้ายออก และรายการหักเงิน ระบบรวมยอดค้างเดิมของห้องนี้ให้อัตโนมัติ</p>
+    <p class="hint">กรอกเลขมิเตอร์วันย้ายออก และรายการหักเงิน ระบบรวมยอดค้างเดิมให้อัตโนมัติ บิลเก่าจะถูกทำเครื่องหมายว่า “รวมในบัญชีย้ายออก” ไม่ได้เปลี่ยนเป็นจ่ายแล้วเอง.${alreadyBilled?' เดือนนี้มีบิลปกติแล้ว จึงตั้งค่าห้องและค่าบริการงวดสุดท้ายเป็น 0 เพื่อป้องกันการคิดซ้ำ หากต้องคิดค่าเช่าเพิ่ม/ปรับตามวันให้แก้ช่องค่าห้องก่อนยืนยัน':''}</p>
     <div class="g2">
       ${f("mo_e0","ไฟ เลขก่อนหน้า",r.e0)}${f("mo_e1","ไฟ เลขวันย้ายออก",r.e1)}
       ${f("mo_w0","น้ำ เลขก่อนหน้า",r.w0)}${f("mo_w1","น้ำ เลขวันย้ายออก",r.w1)}
-      ${f("mo_rent","ค่าห้องงวดสุดท้าย (ปรับตามวันได้)",r.rent)}${f("mo_other","ค่าอื่นๆ",0)}
+      ${f("mo_rent","ค่าห้องงวดสุดท้าย (ปรับตามวันได้)",alreadyBilled?0:r.rent)}${f("mo_other","ค่าอื่นๆ",0)}
       ${f("mo_dmg","หักค่าเสียหาย/ทำความสะอาด",0)}${f("mo_dmgnote","รายละเอียดที่หัก","", "text")}
     </div>
     <div id="mo_res" style="margin-top:10px"></div>
@@ -2285,14 +2440,15 @@ function openMoveOut(i){
 function moClose(){ $("modal").classList.remove("on"); $("modal").innerHTML=""; moIdx=-1; }
 function moVals(){
   const r=S.rooms[moIdx], g=id=>num($(id).value);
+  const alreadyBilled=!!r&&S.hist.some(h=>String(h.room)===String(r.no)&&h.month===monthStr()&&!h.final&&!h.settlement&&!h.movedToFinal);
   const eu=Math.max(0,g("mo_e1")-g("mo_e0")), wu=Math.max(0,g("mo_w1")-g("mo_w0"));
   const ea=eu*num(S.cfg.er); let wa=wu*num(S.cfg.wr);
-  if(num(S.cfg.wmin)&&wa<num(S.cfg.wmin)) wa=num(S.cfg.wmin);
+  if(!alreadyBilled&&num(S.cfg.wmin)&&wa<num(S.cfg.wmin)) wa=num(S.cfg.wmin);
   const rent=g("mo_rent"), other=g("mo_other"), dmg=g("mo_dmg");
-  const fin=rent+ea+wa+other;
-  const unpaid=S.hist.filter(h=>h.room===r.no&&!h.paid).reduce((s,h)=>s+owed(h),0);
+  const svc=alreadyBilled?0:num(S.cfg.svc), fin=rent+ea+wa+other+svc;
+  const unpaid=S.hist.filter(h=>String(h.room)===String(r.no)&&isOutstanding(h)).reduce((s,h)=>s+owed(h),0);
   const dep=num(r.deposit);
-  return { r,eu,wu,ea,wa,rent,other,dmg,fin,unpaid,dep,refund:dep-fin-unpaid-dmg,
+  return { r,eu,wu,ea,wa,rent,other,svc,dmg,fin,unpaid,dep,refund:dep-fin-unpaid-dmg,
            e0:g("mo_e0"),e1:g("mo_e1"),w0:g("mo_w0"),w1:g("mo_w1"), dmgnote:$("mo_dmgnote").value };
 }
 function moRows(v){
@@ -2300,7 +2456,7 @@ function moRows(v){
     <div class="stat"><span>ค่าห้องงวดสุดท้าย</span><b>− ${fmt(v.rent)}</b></div>
     <div class="stat"><span>ค่าไฟ (${v.eu} หน่วย)</span><b>− ${fmt(v.ea)}</b></div>
     <div class="stat"><span>ค่าน้ำ (${v.wu} หน่วย)</span><b>− ${fmt(v.wa)}</b></div>
-    ${v.other?`<div class="stat"><span>ค่าอื่นๆ</span><b>− ${fmt(v.other)}</b></div>`:""}
+    ${v.svc?`<div class="stat"><span>ค่าบริการทั่วไป</span><b>− ${fmt(v.svc)}</b></div>`:""}${v.other?`<div class="stat"><span>ค่าอื่นๆ</span><b>− ${fmt(v.other)}</b></div>`:""}
     <div class="stat"><span>ยอดค้างเดิม (รวมค่าปรับ)</span><b>− ${fmt(v.unpaid)}</b></div>
     ${v.dmg?`<div class="stat"><span>ค่าเสียหาย${v.dmgnote?" ("+esc(v.dmgnote)+")":""}</span><b>− ${fmt(v.dmg)}</b></div>`:""}`;
 }
@@ -2323,31 +2479,81 @@ function moPrint(){ printDocs([moDoc(moVals())]); }
 function moShare(){ const v=moVals(); shareHTML(moDoc(v),`สรุปย้ายออกห้อง${v.r.no}`); }
 function moConfirm(){
   const v=moVals(), r=v.r;
-  if(!confirm(`ยืนยันย้ายออก ห้อง ${r.no}?\nยอด${v.refund>=0?"คืนเงินประกัน":"เก็บเพิ่ม"} ${fmt(Math.abs(v.refund))} บาท\nบิลค้างเดิมของห้องนี้จะถูกบันทึกว่าหักจากเงินประกันแล้ว`)) return;
-  const note="หักจากเงินประกัน (ย้ายออก)";
-  S.hist.filter(h=>h.room===r.no&&!h.paid).forEach(h=>markPaid(h,note));
-  const fb={ id:uid(), final:true, month:monthStr(), room:r.no, tenant:r.tenant, rent:v.rent, e0:v.e0, e1:v.e1, eu:v.eu,
-             w0:v.w0, w1:v.w1, wu:v.wu, er:num(S.cfg.er), wr:num(S.cfg.wr), ea:v.ea, wa:v.wa, other:v.other,
-             total:v.fin, paid:true, paidDate:todayStr(), late:0, rc:nextRc(), note:"บิลสุดท้าย "+note };
+  if(!r || r.vacant){ alert("ห้องนี้ไม่ได้อยู่ในสถานะมีผู้เช่าแล้ว"); return; }
+  const rateErr=billingConfigError(); if(rateErr){ alert("ยังสรุปบัญชีย้ายออกไม่ได้: "+rateErr); return; }
+  const rawFields=["mo_e0","mo_e1","mo_w0","mo_w1","mo_rent","mo_other","mo_dmg"];
+  if(rawFields.some(id=>String($(id).value??"").trim()===""||!Number.isFinite(Number($(id).value))||Number($(id).value)<0)){ alert("กรุณากรอกเลขมิเตอร์และยอดเงินให้ครบ และต้องไม่ติดลบ"); return; }
+  const numFields=[v.e0,v.e1,v.w0,v.w1,v.rent,v.other,v.dmg,v.dep];
+  if(numFields.some(n=>!Number.isFinite(Number(n))||Number(n)<0)){ alert("เลขมิเตอร์ ค่าห้อง ค่าอื่น ค่าเสียหาย และเงินประกันต้องเป็นตัวเลขที่ไม่ติดลบ"); return; }
+  if(v.e1<v.e0 || v.w1<v.w0){ alert("เลขมิเตอร์วันย้ายออกน้อยกว่าเลขเดิม กรุณาตรวจเลขหรือจัดการกรณีเปลี่ยน/วนรอบมิเตอร์ก่อน"); return; }
+  if(!String(r.tenant||"").trim()){ alert("ไม่พบชื่อผู้เช่า กรุณาตรวจข้อมูลก่อนย้ายออก"); return; }
+  const collect=Math.max(0,-v.refund), refund=Math.max(0,v.refund);
+  if(!confirm(`ยืนยันย้ายออก ห้อง ${r.no}?\nยอดเรียกเก็บเพิ่มหลังหักเงินประกัน ${fmt(collect)} บาท\nยอดเงินประกันที่ต้องคืน ${fmt(refund)} บาท\nบิลค้างเดิมจะถูกเก็บเป็นประวัติและทำเครื่องหมายว่ารวมในบัญชีย้ายออก ไม่ถือว่ารับเงินแล้ว`)) return;
+  snapNow("ก่อนย้ายออก");
+  const prior=S.hist.filter(h=>String(h.room)===String(r.no)&&isOutstanding(h));
+  const previousDebt=prior.reduce((sum,h)=>sum+owed(h),0);
+  const settlementId=uid();
+  prior.forEach(h=>{ h.movedToFinal=true; h.settlementId=settlementId; h.note=[h.note,"รวมในบัญชีย้ายออก "+todayStr()].filter(Boolean).join(" · "); });
+  const detail={deposit:v.dep,previousDebt,finalRent:v.rent,service:v.svc,electricity:v.ea,water:v.wa,other:v.other,damage:v.dmg,refund,collect,dmgnote:v.dmgnote,e0:v.e0,e1:v.e1,w0:v.w0,w1:v.w1,eu:v.eu,wu:v.wu,er:num(S.cfg.er),wr:num(S.cfg.wr),wmin:num(S.cfg.wmin),refundPaid:refund<=0};
+  const fb={ id:settlementId, final:true, settlement:true, settlementDetails:detail, month:monthStr(), room:r.no, tenant:r.tenant,
+    rent:v.fin, e0:v.e0, e1:v.e1, eu:v.eu, w0:v.w0, w1:v.w1, wu:v.wu,
+    er:num(S.cfg.er), wr:num(S.cfg.wr), ea:v.ea, wa:v.wa, other:v.other+v.svc, svc:v.svc,
+    total:collect, paid:collect===0, paidDate:collect===0?todayStr():"", late:0, wht:0,
+    rc:"", note:"บัญชีย้ายออก: ยอดสุทธิหลังหักเงินประกัน", wmin:num(S.cfg.wmin) };
   S.hist.push(fb);
   if(v.dmg) S.repairs.push({id:uid(),date:todayStr(),room:r.no,desc:"หักค่าเสียหายตอนย้ายออก"+(v.dmgnote?" ("+v.dmgnote+")":""),cost:0,income:v.dmg});
-  S.moves.push({id:uid(),date:todayStr(),room:r.no,tenant:r.tenant,deposit:v.dep,final:v.fin,unpaid:v.unpaid,dmg:v.dmg,dmgnote:v.dmgnote,refund:v.refund});
-  Object.assign(r,{tenant:"",phone:"",line:"",plate:"",start:"",end:"",deposit:0,vacant:true,e0:v.e1,e1:v.e1,w0:v.w1,w1:v.w1,other:0,lastEu:0,lastWu:0});
+  S.moves.push({id:settlementId,date:todayStr(),room:r.no,tenant:r.tenant,deposit:v.dep,final:v.fin,unpaid:previousDebt,dmg:v.dmg,dmgnote:v.dmgnote,refund:v.refund,refundPaid:v.refund<=0,settlementId});
+  Object.assign(r,{tenant:"",phone:"",line:"",plate:"",tAddr:"",tTax:"",wht:false,start:"",end:"",deposit:0,vacant:true,e0:v.e1,e1:v.e1,w0:v.w1,w1:v.w1,eRead:false,wRead:false,other:0,lastEu:0,lastWu:0,eOld:0,wOld:0});
   save(); moClose(); renderRooms(); renderTop(); fillMonths();
-  alert("ย้ายออกเรียบร้อย ห้อง "+r.no+" ตั้งเป็นห้องว่างแล้ว");
+  alert("ย้ายออกเรียบร้อย ห้อง "+r.no+" ตั้งเป็นห้องว่างแล้ว\nบัญชีย้ายออกถูกบันทึกในประวัติแล้ว หากมียอดเรียกเก็บเพิ่ม ให้ติดตามจากบิลสรุปย้ายออก");
+}
+
+function settlementDoc(b, rc){
+  const d=b.settlementDetails||{}, C=S.cfg;
+  const rows=[
+    ["เงินประกัน",num(d.deposit)],
+    ["หักยอดค้างเดิม",-num(d.previousDebt)],
+    ["ค่าห้องงวดสุดท้าย",-num(d.finalRent)],
+    ["ค่าบริการทั่วไป",-num(d.service)],
+    ["ค่าไฟ ("+num(d.eu)+" หน่วย)",-num(d.electricity)],
+    ["ค่าน้ำ ("+num(d.wu)+" หน่วย)",-num(d.water)],
+    ["ค่าอื่นๆ",-num(d.other)],
+    ["ค่าเสียหาย/ทำความสะอาด",-num(d.damage)]
+  ];
+  const body=rows.filter((r,i)=>i===0||r[1]!==0).map((r,i)=>`<tr><td colspan="3">${esc(r[0])}</td><td class="n">${r[1]<0?"− ":""}${fmt(Math.abs(r[1]))}</td></tr>`).join("");
+  const amount=Math.max(0,num(d.collect));
+  const refund=Math.max(0,num(d.refund));
+  const title=rc?"ใบเสร็จรับเงิน":"สรุปบัญชีย้ายออก";
+  return `<div class="bill cl"><div class="cl-t">${title}</div><div class="cl-n">${esc(C.dorm)}</div>${C.addr?`<div class="da">${esc(C.addr)}</div>`:""}<hr>
+    <div class="cl-i">วันที่ ${thDateStr(rc?b.paidDate:todayStr())}<br>ห้อง <b>${esc(b.room)}</b> · ผู้เช่า ${esc(b.tenant)||"-"}<br>เลขอ้างอิง ${esc(b.id)}</div>
+    <table class="cl-tb"><tr class="hd"><th colspan="3">รายการสรุปเงินประกันและยอดคงค้าง</th><th class="n">บาท</th></tr>${body}
+    <tr class="tt"><td colspan="3" class="n"><b>${refund>0?"เงินประกันที่ต้องคืน":amount>0?"ยอดที่ต้องชำระเพิ่มหลังหักเงินประกัน":"ยอดคงเหลือสุทธิ"}</b></td><td class="n"><b>${fmt(refund>0?refund:amount)}</b></td></tr></table>
+    <p class="hint">${refund>0?(d.refundPaid?"บันทึกว่าคืนเงินประกันแล้ว":"รอบันทึกการคืนเงินจริง"):amount>0?(b.paid?"บันทึกรับเงินแล้ว":"ยังไม่รับชำระยอดคงเหลือนี้"):"บัญชีปิดยอดเป็นศูนย์ ไม่มีเงินรับเพิ่ม"}</p>
+    ${d.dmgnote?`<p>รายละเอียดค่าเสียหาย: ${esc(d.dmgnote)}</p>`:""}<div class="cl-sg"><div>ผู้เช่า</div><div>ผู้ให้เช่า / ผู้รับเงิน</div></div></div>`;
+}
+function markRefunded(id){
+  const m=S.moves.find(x=>x.id===id); if(!m||num(m.refund)<=0||m.refundPaid) return;
+  if(!confirm(`ยืนยันว่าคืนเงินประกันห้อง ${m.room} จำนวน ${fmt(m.refund)} บาทแล้วใช่ไหม?`)) return;
+  m.refundPaid=true; m.refundPaidDate=todayStr();
+  const h=S.hist.find(x=>x.id===m.settlementId); if(h&&h.settlementDetails){ h.settlementDetails.refundPaid=true; h.settlementDetails.refundPaidDate=todayStr(); }
+  save(); renderHist(); renderSummary();
 }
 
 /* ---------- กรอกผู้เช่าหลายห้อง ---------- */
 function applyTenant(r,d){
-  const was=!!r.vacant;
-  r.tenant=d.name;
-  if(d.phone!=null && d.phone!=="") r.phone=d.phone;
-  if(num(d.rent)) r.rent=num(d.rent);
-  if(d.dep!=null && d.dep!=="") r.deposit=num(d.dep);
+  const was=!!r.vacant, name=String(d.name||"").trim();
+  if(!name) return;
   if(was){
-    r.vacant=false; r.start=r.start||todayStr();
+    Object.assign(r,{phone:"",line:"",plate:"",tAddr:"",tTax:"",wht:false,deposit:0,start:todayStr(),end:"",other:0,lastEu:0,lastWu:0,eOld:0,wOld:0,eRead:false,wRead:false});
+  }
+  r.tenant=name;
+  if(d.phone!=null && d.phone!=="") r.phone=String(d.phone);
+  if(Number.isFinite(Number(d.rent)) && String(d.rent).trim()!=="") r.rent=Math.max(0,Number(d.rent));
+  if(d.dep!=null && d.dep!=="") r.deposit=Math.max(0,num(d.dep));
+  if(was){
+    r.vacant=false;
     const e=(d.e===""||d.e==null)?num(r.e1):num(d.e), w=(d.w===""||d.w==null)?num(r.w1):num(d.w);
-    r.e0=e; r.e1=e; r.w0=w; r.w1=w; r.other=0; r.lastEu=0; r.lastWu=0; r.eOld=0; r.wOld=0;
+    r.e0=e; r.e1=e; r.w0=w; r.w1=w; r.eRead=false; r.wRead=false;
   }
 }
 let bkIds=[];
@@ -2377,10 +2583,28 @@ function openBulk(){
 }
 function bkAllRent(){ const v=$("bk_all").value; if(v==="") return; bkIds.forEach(i=>{ $("bk_rent_"+i).value=v; }); }
 function bkSave(){
-  let n=0, ex=0;
+  let n=0, ex=0; const problems=[];
+  // Validate all new move-ins before changing any room, to avoid a half-saved bulk operation.
   bkIds.forEach(i=>{
-    const r=S.rooms[i], g=k=>$("bk_"+k+"_"+i).value, name=g("name").trim();
-    if(!name){ return; }
+    const r=S.rooms[i], g=k=>$("bk_"+k+"_"+i).value, name=String(g("name")||"").trim();
+    if(!name || !r || !r.vacant) return;
+    for(const [key,label] of [["e","เลขไฟวันเข้า"],["w","เลขน้ำวันเข้า"]]){
+      const raw=String(g(key)??"").trim();
+      if(raw===""||!Number.isFinite(Number(raw))||Number(raw)<0) problems.push(`ห้อง ${r.no}: ${label} ต้องเป็นตัวเลขไม่ติดลบ (ไม่มีหน่วยให้ใส่ 0)`);
+    }
+    const rent=String(g("rent")??"").trim();
+    if(rent!==""&&(!Number.isFinite(Number(rent))||Number(rent)<0)) problems.push(`ห้อง ${r.no}: ค่าห้องไม่ถูกต้อง`);
+    const dep=String(g("dep")??"").trim();
+    if(dep!==""&&(!Number.isFinite(Number(dep))||Number(dep)<0)) problems.push(`ห้อง ${r.no}: เงินประกันไม่ถูกต้อง`);
+  });
+  if(problems.length){
+    alert(`ยังไม่ได้บันทึก กรุณาแก้ข้อมูลเหล่านี้ก่อน:
+${problems.slice(0,12).join("\n")}${problems.length>12?`\nและอีก ${problems.length-12} รายการ`:""}`);
+    return;
+  }
+  bkIds.forEach(i=>{
+    const r=S.rooms[i], g=k=>$("bk_"+k+"_"+i).value, name=String(g("name")||"").trim();
+    if(!name||!r) return;
     const occ=!r.vacant;
     applyTenant(r,{name,phone:g("phone"),rent:g("rent"),dep:g("dep"),e:g("e"),w:g("w")});
     occ?ex++:n++;
@@ -2390,21 +2614,30 @@ function bkSave(){
 }
 function bkPaste(){
   const t=$("bk_paste").value.trim(); if(!t){ alert("ยังไม่ได้วางข้อมูล"); return; }
-  let n=0, bad=0;
+  let n=0, bad=0; const seen=new Set();
   t.split(/\r?\n/).forEach(line=>{
     if(!line.trim()) return;
-    const c=line.split(line.includes("\t")?"\t":",").map(x=>x.trim());
-    if(!/\d/.test(c[0]||"") || !c[1]){ bad++; return; }
-    let r=S.rooms.find(x=>String(x.no)===c[0]);
-    if(!r){ r=newRoom(c[0],S.rooms[0]?S.rooms[0].rent:3000); r.vacant=true; S.rooms.push(r); }
+    const c=line.split(line.includes("\t")?"\t":",").map(x=>x.trim()), no=String(c[0]||"");
+    if(!/^[-A-Za-z0-9]+$/.test(no) || !c[1]){ bad++; return; }
+    if(seen.has(no)){ bad++; return; } seen.add(no);
+    const existing=S.rooms.find(x=>String(x.no)===no), needsMeter=!existing||existing.vacant;
+    if(needsMeter){
+      const e=String(c[5]??"").replace(/,/g,"").trim(), w=String(c[6]??"").replace(/,/g,"").trim();
+      if(e===""||w===""||!Number.isFinite(Number(e))||!Number.isFinite(Number(w))||Number(e)<0||Number(w)<0){ bad++; return; }
+    }
+    for(const [idx,label] of [[3,"ค่าห้อง"],[4,"เงินประกัน"]]){
+      const raw=String(c[idx]??"").replace(/,/g,"").trim();
+      if(raw!==""&&(!Number.isFinite(Number(raw))||Number(raw)<0)){ bad++; return; }
+    }
+    let r=existing;
+    if(!r){ r=newRoom(no,S.rooms[0]?S.rooms[0].rent:3000); r.vacant=true; S.rooms.push(r); }
     applyTenant(r,{name:c[1],phone:c[2],rent:(c[3]||"").replace(/,/g,""),dep:(c[4]||"").replace(/,/g,""),e:(c[5]||"").replace(/,/g,""),w:(c[6]||"").replace(/,/g,"")});
     n++;
   });
   S.rooms.sort((a,b)=>String(a.no).localeCompare(String(b.no),"th",{numeric:true}));
   save(); moClose(); renderRooms(); renderTop();
-  alert(`นำเข้า ${n} ห้อง${bad?` · ข้าม ${bad} แถวที่รูปแบบไม่ถูกต้อง (หัวตาราง/ไม่มีชื่อ)`:""}`);
+  alert(`นำเข้าข้อมูลสำเร็จ ${n} แถว${bad?` · ข้าม ${bad} แถวที่ข้อมูลผิด/ซ้ำ/เลขมิเตอร์ไม่ครบ` : ""}`);
 }
-
 /* ---------- ย้ายเข้า ---------- */
 let miIdx=-1;
 function openMoveIn(i){
@@ -2424,8 +2657,13 @@ function openMoveIn(i){
 function miConfirm(){
   const r=S.rooms[miIdx], g=id=>$(id).value, name=g("mi_name").trim();
   if(!name){ alert("กรอกชื่อผู้เช่าก่อน"); return; }
-  Object.assign(r,{tenant:name,phone:g("mi_phone"),rent:num(g("mi_rent")),deposit:num(g("mi_dep")),start:g("mi_start"),end:g("mi_end"),
-    e0:num(g("mi_e")),e1:num(g("mi_e")),w0:num(g("mi_w")),w1:num(g("mi_w")),other:0,lastEu:0,lastWu:0,eOld:0,wOld:0,vacant:false});
+  if(!r || !r.vacant){ alert("ห้องนี้ไม่ได้อยู่ในสถานะว่างแล้ว กรุณารีเฟรชข้อมูลก่อน"); moClose(); return; }
+  for(const [id,label] of [["mi_rent","ค่าห้อง"],["mi_dep","เงินประกัน"],["mi_e","เลขมิเตอร์ไฟวันเข้า"],["mi_w","เลขมิเตอร์น้ำวันเข้า"]]){
+    const raw=String(g(id)??"").trim();
+    if(raw===""||!Number.isFinite(Number(raw))||Number(raw)<0){ alert(label+" ต้องเป็นตัวเลขไม่ติดลบ (ไม่มีค่าให้ใส่ 0)"); return; }
+  }
+  Object.assign(r,{tenant:name,phone:g("mi_phone"),line:"",plate:"",tAddr:"",tTax:"",wht:false,rent:Math.max(0,num(g("mi_rent"))),deposit:Math.max(0,num(g("mi_dep"))),start:g("mi_start"),end:g("mi_end"),
+    e0:Math.max(0,num(g("mi_e"))),e1:Math.max(0,num(g("mi_e"))),w0:Math.max(0,num(g("mi_w"))),w1:Math.max(0,num(g("mi_w"))),eRead:false,wRead:false,other:0,lastEu:0,lastWu:0,eOld:0,wOld:0,vacant:false});
   save(); moClose(); renderRooms(); renderTop();
 }
 
@@ -2453,8 +2691,12 @@ function renderRepairs(){
     || '<p class="hint">ไม่มีรายการในเดือนนี้</p>') + `<div class="stat" style="margin-top:8px"><b>รวมค่าใช้จ่ายเดือนนี้</b><b>${fmt(tot)}</b></div>`;
 }
 function addRepair(){
-  const desc=$("rp_desc").value.trim(); if(!desc){ alert("กรอกรายการก่อน"); return; }
-  S.repairs.push({id:uid(),date:$("rp_date").value||todayStr(),room:$("rp_room").value,desc,cost:num($("rp_cost").value)});
+  const desc=$("rp_desc").value.trim(), raw=String($("rp_cost").value??"").trim();
+  if(!desc){ alert("กรอกรายการก่อน"); return; }
+  if(raw===""||!Number.isFinite(Number(raw))||Number(raw)<0){ alert("ค่าใช้จ่ายต้องเป็นตัวเลขที่ไม่ติดลบ หากไม่มีค่าใช้จ่ายให้ใส่ 0"); return; }
+  const date=$("rp_date").value||todayStr();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(pd(date).getTime())){ alert("กรุณาเลือกวันที่แจ้งซ่อมให้ถูกต้อง"); return; }
+  S.repairs.push({id:uid(),date,room:$("rp_room").value,desc,cost:Number(raw)});
   $("rp_desc").value=""; $("rp_cost").value=0; save(); renderRepairs(); renderSummary();
 }
 function delRepair(id){ if(confirm("ลบรายการนี้?")){ S.repairs=S.repairs.filter(r=>r.id!==id); save(); renderRepairs(); renderSummary(); } }
@@ -2463,56 +2705,63 @@ function delRepair(id){ if(confirm("ลบรายการนี้?")){ S.rep
 function floorStats(list){
   const m={};
   list.forEach(h=>{ const f=floorOf(h.room); const o=m[f]=m[f]||{n:0,bill:0,got:0,out:0};
-    o.n++; o.bill+=num(h.total); if(h.paid) o.got+=num(h.total)+num(h.late)-num(h.wht); else o.out+=owed(h); });
+    o.n++; o.bill+=num(h.total); if(h.paid) o.got+=num(h.total)+num(h.late)-num(h.wht); else if(isOutstanding(h)) o.out+=owed(h); });
   return Object.keys(m).sort((a,b)=>(+a||0)-(+b||0)).map(f=>Object.assign({f},m[f]));
 }
 function printReport(){
-  const list=S.hist.filter(h=>h.month===curHM);
-  if(!list.length){ alert("ยังไม่มีข้อมูล ปิดเดือนอย่างน้อย 1 ครั้งก่อน"); return; }
+  const list=S.hist.filter(h=>h.month===curHM&&!h.movedToFinal);
+  if(!list.length){ alert("ยังไม่มีข้อมูลบิลที่ยังใช้งานในเดือนนี้ (บิลที่รวมในบัญชีย้ายออกจะไม่ถูกรวมซ้ำ)"); return; }
   const st=floorStats(list), sm=k=>st.reduce((a,x)=>a+x[k],0);
-  const un=list.filter(h=>!h.paid).sort((a,b)=>String(a.room).localeCompare(String(b.room),"th",{numeric:true}));
+  const un=list.filter(isOutstanding).sort((a,b)=>String(a.room).localeCompare(String(b.room),"th",{numeric:true}));
   const exp=S.repairs.filter(r=>String(r.date).startsWith(curHM)&&!r.income).reduce((a,r)=>a+num(r.cost),0);
+  const refundOut=S.moves.filter(m=>String(m.refundPaidDate||m.date||"").startsWith(curHM)&&num(m.refund)>0&&m.refundPaid).reduce((a,m)=>a+num(m.refund),0);
   const html=`<div class="bill">${docHead("รายงานสรุปประจำเดือน "+thMonth(curHM))}
     <div>พิมพ์เมื่อ ${thDate(new Date())}</div>
     <table><tr><th>ชั้น</th><th class="n">จำนวนบิล</th><th class="n">เรียกเก็บ</th><th class="n">รับแล้ว</th><th class="n">ค้างจ่าย</th></tr>
       ${st.map(x=>`<tr><td>ชั้น ${x.f}</td><td class="n">${x.n}</td><td class="n">${fmt(x.bill)}</td><td class="n">${fmt(x.got)}</td><td class="n">${fmt(x.out)}</td></tr>`).join("")}
       <tr class="t"><td>รวม</td><td class="n">${sm("n")}</td><td class="n">${fmt(sm("bill"))}</td><td class="n">${fmt(sm("got"))}</td><td class="n">${fmt(sm("out"))}</td></tr>
     </table>
-    <p>ค่าซ่อม/ค่าใช้จ่ายเดือนนี้ ${fmt(exp)} บาท · คงเหลือสุทธิ (รับแล้ว − ค่าใช้จ่าย) <b>${fmt(sm("got")-exp)}</b> บาท</p>
+    <p>ค่าซ่อม/ค่าใช้จ่ายเดือนนี้ ${fmt(exp)} บาท<br>คืนเงินประกันที่จ่ายคืนแล้ว ${fmt(refundOut)} บาท<br>คงเหลือสุทธิหลังหักค่าใช้จ่ายและเงินคืน <b>${fmt(sm("got")-exp-refundOut)}</b> บาท</p>
     ${un.length?`<h3>รายการค้างจ่าย (${un.length} ห้อง)</h3><table><tr><th>ห้อง</th><th>ผู้เช่า</th><th class="n">ยอดค้าง</th></tr>
       ${un.map(h=>`<tr><td>${esc(h.room)}</td><td>${esc(h.tenant)||"-"}</td><td class="n">${fmt(owed(h))}</td></tr>`).join("")}</table>`:"<p>ไม่มียอดค้างชำระ</p>"}
   </div>`;
   printDocs([html]);
 }
 function renderSummary(){
-  const list=S.hist.filter(h=>h.month===curHM);
-  const sum=k=>list.reduce((s,h)=>s+num(h[k]),0);
-  const total=sum("total"), lateAll=list.filter(h=>h.paid).reduce((s,h)=>s+num(h.late),0);
-  const got=list.filter(h=>h.paid).reduce((s,h)=>s+num(h.total)+num(h.late)-num(h.wht),0);
-  const whtAll=list.reduce((s,h)=>s+num(h.wht),0);
+  const allList=S.hist.filter(h=>h.month===curHM);
+  const list=allList.filter(h=>!h.movedToFinal);
+  const regular=list.filter(h=>!h.settlement), settlements=list.filter(h=>h.settlement);
+  const sum=k=>regular.reduce((s,h)=>s+num(h[k]),0);
+  const settlementTotal=settlements.reduce((s,h)=>s+num(h.total),0);
+  const total=sum("total")+settlementTotal;
+  const lateAll=regular.filter(h=>h.paid).reduce((s,h)=>s+num(h.late),0);
+  const got=list.filter(h=>h.paid).reduce((s,h)=>s+(h.settlement?num(h.total):num(h.total)+num(h.late)-num(h.wht)),0);
+  const whtAll=regular.reduce((s,h)=>s+num(h.wht),0);
   const exp=S.repairs.filter(r=>String(r.date).startsWith(curHM)&&!r.income).reduce((s,r)=>s+num(r.cost),0);
+  const refundOut=S.moves.filter(m=>String(m.refundPaidDate||m.date||"").startsWith(curHM)&&num(m.refund)>0&&m.refundPaid).reduce((s,m)=>s+num(m.refund),0);
   const rooms=S.rooms.length, occ=occupied().length;
   $("sumBox").innerHTML = list.length ? `
     <div class="stat"><span>ค่าห้อง</span><b>${fmt(sum("rent"))}</b></div>
     <div class="stat"><span>ค่าไฟ</span><b>${fmt(sum("ea"))}</b></div>
     <div class="stat"><span>ค่าน้ำ</span><b>${fmt(sum("wa"))}</b></div>
     <div class="stat"><span>ค่าอื่นๆ</span><b>${fmt(sum("other"))}</b></div>
-    <div class="stat"><span><b>รวมที่เรียกเก็บ</b></span><b>${fmt(total)}</b></div>
-    <div class="stat"><span class="paid">รับเงินแล้ว (${list.filter(h=>h.paid).length}/${list.length} บิล)</span><b class="paid">${fmt(got)}</b></div>
+    ${settlements.length?`<div class="stat"><span>ยอดบัญชีย้ายออกหลังหักเงินประกัน</span><b>${fmt(settlementTotal)}</b></div>`:""}
+    <div class="stat"><span><b>รวมที่เรียกเก็บ/ปิดบัญชี</b></span><b>${fmt(total)}</b></div>
+    <div class="stat"><span class="paid">รับเงินแล้ว (บิลปกติ ${regular.filter(h=>h.paid).length}/${regular.length} ใบ)</span><b class="paid">${fmt(got)}</b></div>
     ${whtAll?`<div class="stat"><span>ภาษีหัก ณ ที่จ่าย (รอใบรับรองจากผู้เช่า)</span><b>${fmt(whtAll)}</b></div>`:""}
     <div class="stat"><span>ในนี้เป็นค่าปรับจ่ายช้า</span><b>${fmt(lateAll)}</b></div>
-    <div class="stat"><span class="unpaid">ยังค้าง</span><b class="unpaid">${fmt(list.filter(h=>!h.paid).reduce((s,h)=>s+owed(h),0))}</b></div>
+    <div class="stat"><span class="unpaid">ยังค้าง</span><b class="unpaid">${fmt(list.filter(isOutstanding).reduce((s,h)=>s+owed(h),0))}</b></div>
     <div class="stat"><span>ค่าซ่อม/ค่าใช้จ่าย</span><b>− ${fmt(exp)}</b></div>
-    <div class="stat"><span><b>คงเหลือสุทธิ (รับแล้ว − ค่าใช้จ่าย)</b></span><b>${fmt(got-exp)}</b></div>
+    ${refundOut?`<div class="stat"><span>คืนเงินประกันที่จ่ายคืนแล้ว</span><b>− ${fmt(refundOut)}</b></div>`:""}
+    <div class="stat"><span><b>คงเหลือสุทธิหลังหักค่าใช้จ่ายและเงินคืน</b></span><b>${fmt(got-exp-refundOut)}</b></div>
     <h2 style="margin-top:12px">🏢 แยกตามชั้น</h2>
-    ${floorStats(list).map(x=>`<div class="stat"><span>ชั้น ${x.f} (${x.n} บิล)</span><b>รับ ${fmt(x.got)} · <span class="unpaid">ค้าง ${fmt(x.out)}</span></b></div>`).join("")}
+    ${floorStats(list).map(x=>`<div class="stat"><span>ชั้น ${x.f} (${x.n} รายการ)</span><b>รับ ${fmt(x.got)} · <span class="unpaid">ค้าง ${fmt(x.out)}</span></b></div>`).join("")}
     <div class="stat"><span>อัตราเข้าพักปัจจุบัน</span><b>${rooms?`${occ}/${rooms} ห้อง (${Math.round(occ/rooms*100)}%)`:"-"}</b></div>` : '<p class="hint">ยังไม่มีข้อมูล ปิดเดือนอย่างน้อย 1 ครั้งก่อน</p>';
   const ms=months().slice(0,6).reverse();
-  const tot=ms.map(m=>S.hist.filter(h=>h.month===m).reduce((s,h)=>s+num(h.total),0));
+  const tot=ms.map(m=>S.hist.filter(h=>h.month===m&&!h.movedToFinal).reduce((s,h)=>s+num(h.total),0));
   const mx=Math.max(1,...tot);
   $("trend").innerHTML = ms.map((m,i)=>`<div style="margin-bottom:8px"><div class="stat" style="border:0"><span>${thMonth(m)}</span><b>${fmt(tot[i])}</b></div><div class="bar" style="width:${Math.round(tot[i]/mx*100)}%"></div></div>`).join("") || '<p class="hint">ยังไม่มีข้อมูล</p>';
 }
-
 /* ---------- ตั้งค่า / สำรองข้อมูล ---------- */
 function bindSettings(){
   ["dorm","addr","taxId","perPage","svc","er","wr","wmin","dueDay","lateFee","warn","note","pp","ppName"].forEach(k=>{
@@ -2538,16 +2787,56 @@ function exportData(){
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
   a.download=`สำรองข้อมูล-${S.cfg.dorm}-${todayStr()}.json`; a.click();
 }
+function safeRecordId(value){
+  const x=String(value||""); return /^[A-Za-z0-9_-]{1,100}$/.test(x)?x:uid();
+}
+function validateImportFile(x){
+  if(!x||typeof x!=="object"||Array.isArray(x)||!x.cfg||typeof x.cfg!=="object"||Array.isArray(x.cfg)||!Array.isArray(x.rooms)||!Array.isArray(x.hist)||x.rooms.length>5000||x.hist.length>100000) throw new Error("bad structure");
+  if(x.repairs!==undefined&&!Array.isArray(x.repairs)) throw new Error("bad repairs");
+  if(x.moves!==undefined&&!Array.isArray(x.moves)) throw new Error("bad moves");
+  const seen=new Set(), ids=new Set(), billKeys=new Set();
+  for(const r of x.rooms){
+    if(!r||typeof r!=="object"||r.no==null||!String(r.no).trim()||String(r.no).length>40) throw new Error("bad room");
+    const no=String(r.no).trim(); if(seen.has(no)) throw new Error("duplicate room"); seen.add(no);
+    for(const k of ["rent","e0","e1","w0","w1","other","deposit"]){ if(r[k]!==undefined && (!Number.isFinite(Number(r[k]))||Number(r[k])<0)) throw new Error("bad room numeric"); }
+  }
+  for(const h of x.hist){
+    if(!h||typeof h!=="object"||Array.isArray(h)||!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(h.month||""))||h.room==null||String(h.room).length>40) throw new Error("bad bill");
+    if(h.id!==undefined&&(!/^[A-Za-z0-9_-]{1,100}$/.test(String(h.id))||ids.has(String(h.id)))) throw new Error("bad/duplicate bill id");
+    if(h.id!==undefined) ids.add(String(h.id));
+    if(!h.final&&!h.settlement&&!h.movedToFinal){ const k=String(h.month)+"|"+String(h.room); if(billKeys.has(k)) throw new Error("duplicate monthly bill"); billKeys.add(k); }
+    if(h.paid!==undefined&&typeof h.paid!=="boolean") throw new Error("bad paid status");
+    for(const k of ["rent","total","ea","wa","other","wht","late"]){ if(h[k]!==undefined && !Number.isFinite(Number(h[k]))) throw new Error("bad bill numeric"); }
+  }
+  for(const [kind,list] of [["repair",x.repairs||[]],["move",x.moves||[]]]){
+    const used=new Set();
+    for(const rec of list){
+      if(!rec||typeof rec!=="object"||Array.isArray(rec)) throw new Error("bad "+kind);
+      if(rec.id!==undefined){ const id=String(rec.id); if(!/^[A-Za-z0-9_-]{1,100}$/.test(id)||used.has(id)) throw new Error("bad/duplicate "+kind+" id"); used.add(id); }
+      if(rec.room!==undefined&&String(rec.room).length>40) throw new Error("bad "+kind+" room");
+      if(kind==="repair"&&rec.cost!==undefined&&(!Number.isFinite(Number(rec.cost))||Number(rec.cost)<0)) throw new Error("bad repair cost");
+      if(kind==="move"&&rec.refund!==undefined&&!Number.isFinite(Number(rec.refund))) throw new Error("bad move balance");
+    }
+  }
+}
 function importData(inp){
   const f=inp.files[0]; if(!f) return;
   const rd=new FileReader();
   rd.onload=()=>{ try{
     const x=JSON.parse(rd.result);
-    if(!x.cfg || !Array.isArray(x.rooms) || !Array.isArray(x.hist)) throw 0;
+    validateImportFile(x);
     if(!confirm("นำเข้าไฟล์นี้? ข้อมูลปัจจุบันในเครื่องจะถูกแทนที่")) return;
+    snapNow("ก่อนนำเข้าไฟล์");
     const keepPin=S.cfg.pin;
-    S={ cfg:Object.assign(S.cfg,x.cfg,{pin:keepPin}), rooms:x.rooms, hist:x.hist, repairs:x.repairs||[], moves:x.moves||[], seq:x.seq||0 };
-    save(); bindSettings(); renderRooms(); renderTop(); fillMonths(); alert("นำเข้าข้อมูลแล้ว");
+    const cleanLogo=typeof x.cfg.logo==="string"&&/^data:image\/(png|jpeg|webp);base64,/i.test(x.cfg.logo)&&x.cfg.logo.length<3_000_000?x.cfg.logo:"";
+    S={ cfg:Object.assign({},S.cfg,x.cfg,{pin:keepPin,logo:cleanLogo}), rooms:x.rooms.map(r=>{
+      const q=Object.assign(newRoom(String(r.no||""),num(r.rent)||3000),r);
+      q.no=String(q.no||"").trim(); q.tenant=String(q.tenant||""); q.phone=String(q.phone||""); q.line=String(q.line||""); q.plate=String(q.plate||""); q.tAddr=String(q.tAddr||""); q.tTax=String(q.tTax||"");
+      q.vacant=q.tenant.trim()?(typeof r.vacant==="boolean"?r.vacant:false):true; q.wht=!!q.wht;
+      if(typeof q.eRead!=="boolean") q.eRead=num(q.e1)!==num(q.e0); if(typeof q.wRead!=="boolean") q.wRead=num(q.w1)!==num(q.w0);
+      return q;
+    }), hist:x.hist.map(h=>Object.assign({},h,{id:safeRecordId(h.id),room:String(h.room||""),tenant:String(h.tenant||"")})), repairs:Array.isArray(x.repairs)?x.repairs.map(r=>Object.assign({},r,{id:safeRecordId(r.id)})):[], moves:Array.isArray(x.moves)?x.moves:[], seq:Math.max(0,Number(x.seq)||0) };
+    migrateMoveBalances(); save(); bindSettings(); renderRooms(); renderTop(); fillMonths(); alert("นำเข้าข้อมูลแล้ว");
   }catch(e){ alert("ไฟล์ไม่ถูกต้อง"); } };
   rd.readAsText(f); inp.value="";
 }
@@ -2568,20 +2857,20 @@ function renderDash(){
   const m=curMonth(), pend=occ.filter(r=>!hasBill(r,m)), read=pend.filter(isRead).length;
   const closed = pend.length===0;
   const pct = closed ? 100 : Math.round(read/pend.length*100);
-  const un=S.hist.filter(h=>!h.paid), unSum=un.reduce((a,h)=>a+owed(h),0);
+  const un=S.hist.filter(isOutstanding), unSum=un.reduce((a,h)=>a+owed(h),0);
   el.innerHTML=`<h2>📌 งานเดือน ${thMonth(m)}</h2>
     <div class="step"><b>1) จดมิเตอร์</b> — ${closed?"ปิดเดือนนี้แล้ว ✓":`จดแล้ว ${read}/${pend.length} ห้อง (${pct}%)`}
       <div class="prog"><i style="width:${pct}%"></i></div>
       ${(!closed && read<pend.length)?`<button class="sm amber" onclick="openWalk(true)">📝 จดห้องที่ยังไม่ได้จด (${pend.length-read} ห้อง)</button>`:""}</div>
     <div class="step"><b>2) ส่ง/พิมพ์บิล แล้วกด "ปิดเดือน"</b> — ${closed?"ปิดแล้ว ✓":(read===pend.length?"พร้อมแล้ว เลื่อนลงไปกดปุ่มปิดเดือนได้":"รอจดมิเตอร์ให้ครบก่อน")}</div>
     <div class="step"><b>3) ติดตามเงิน</b> — ${un.length?`ค้างจ่าย <span class="unpaid"><b>${un.length}</b> บิล รวม ${fmt(unSum)} บาท</span> <button class="sm blue" onclick="tab(2)">💰 ไปรับเงิน</button>`:"ไม่มียอดค้าง 🎉"}</div>
-    <p class="hint">หมายเหตุ: ห้องที่ใช้ไฟ/น้ำ 0 หน่วยจริงๆ จะนับเป็น "ยังไม่ได้จด" ให้กดข้ามในโหมดจดมิเตอร์ได้</p>`;
+    <p class="hint">หมายเหตุ: แม้ใช้ไฟ/น้ำ 0 หน่วย ต้องกรอกเลขมิเตอร์เดิมซ้ำเพื่อยืนยันว่าจดครบแล้ว</p>`;
 }
 
 /* ================= รับเงินด่วน ================= */
 function qpRender(){
   const q=$("qp").value.trim().toLowerCase(); if(!q){ $("qpRes").innerHTML=""; return; }
-  const list=S.hist.filter(h=>!h.paid && (String(h.room).toLowerCase()===q || String(h.tenant||"").toLowerCase().includes(q)));
+  const list=S.hist.filter(h=>isOutstanding(h) && (String(h.room).toLowerCase()===q || String(h.tenant||"").toLowerCase().includes(q)));
   $("qpRes").innerHTML = list.map(h=>`<div class="hrow"><div class="row0"><div class="info"><b>ห้อง ${esc(h.room)}</b> · ${esc(h.tenant)||"-"}<br><span class="hint">${thMonth(h.month)}</span></div><div class="amt">${fmt(owed(h))}</div></div>
     <div class="btns"><button class="sm" onclick="qpPay('${h.id}')">✅ รับเงินแล้ว</button></div></div>`).join("") || '<p class="hint">ไม่พบบิลค้างของห้อง/ชื่อนี้</p>';
 }
@@ -2611,7 +2900,7 @@ function openEditBill(id){
 function ebVals(){
   const h=S.hist.find(x=>x.id===ebId), g=k=>num($("eb_"+k).value);
   const eu=Math.max(0,g("e1")-g("e0")), wu=Math.max(0,g("w1")-g("w0"));
-  const ea=eu*num(h.er); let wa=wu*num(h.wr); if(num(S.cfg.wmin)&&wa<num(S.cfg.wmin)) wa=num(S.cfg.wmin);
+  const ea=eu*num(h.er); let wa=wu*num(h.wr); const billWmin=h.wmin===undefined?num(S.cfg.wmin):num(h.wmin); if(billWmin&&wa<billWmin) wa=billWmin;
   const rent=g("rent"), other=g("other");
   return {h,eu,wu,ea,wa,rent,other,e0:g("e0"),e1:g("e1"),w0:g("w0"),w1:g("w1"),total:rent+ea+wa+other};
 }
@@ -2623,7 +2912,10 @@ function ebRender(){
 }
 function ebSave(){
   const v=ebVals(), h=v.h;
-  if(v.e1<v.e0||v.w1<v.w0){ if(!confirm("เลขหลังน้อยกว่าเลขก่อน ยังจะบันทึกไหม?")) return; }
+  if(!h) return;
+  if(h.paid){ alert("บิลนี้ทำเครื่องหมายว่ารับเงินแล้ว จึงไม่ให้แก้ยอดโดยตรง กรุณายกเลิกสถานะชำระจากหน้าประวัติบิลก่อน ระบบจะบันทึกการยกเลิกใบเสร็จ แล้วกลับมาแก้ยอดและออกใบเสร็จใหม่เมื่อรับเงินจริง"); return; }
+  if([v.rent,v.other,v.e0,v.e1,v.w0,v.w1].some(n=>!Number.isFinite(Number(n))||Number(n)<0)){ alert("ยอดเงินและเลขมิเตอร์ต้องเป็นตัวเลขที่ไม่ติดลบ"); return; }
+  if(v.e1<v.e0||v.w1<v.w0){ if(!confirm("เลขหลังน้อยกว่าเลขก่อน ยังจะบันทึกไหม? ตรวจสอบว่าเป็นกรณีวนรอบ/เปลี่ยนมิเตอร์จริงก่อนดำเนินการ")) return; }
   const r=S.rooms.find(x=>x.no===h.room && !x.vacant);
   const latest=!S.hist.some(x=>x.room===h.room && !x.final && x.month>h.month);
   if(r && latest){
@@ -2638,6 +2930,7 @@ function ebSave(){
 }
 function ebDel(){
   const h=S.hist.find(x=>x.id===ebId); if(!h) return;
+  if(h.paid||h.rc||String(h.note||"").includes("ยกเลิกใบเสร็จ")){ alert("บิลนี้มีประวัติรับเงิน/ใบเสร็จแล้ว ระบบไม่อนุญาตให้ลบถาวรเพื่อรักษาประวัติบัญชี กรุณาแก้ไขรายการหรือบันทึกยกเลิกสถานะตามขั้นตอนแทน"); return; }
   if(!confirm(`ลบบิลห้อง ${h.room} เดือน ${thMonth(h.month)} จริงๆ ไหม?\n(ลบแล้วกู้คืนไม่ได้ ควรมีไฟล์สำรอง)`)) return;
   S.hist=S.hist.filter(x=>x!==h);
   save(); moClose(); fillMonths(); renderTop();
@@ -2645,10 +2938,11 @@ function ebDel(){
 function undoClose(){
   const m=curHM; if(!m){ alert("ยังไม่มีประวัติบิล"); return; }
   if(months()[0]!==m){ alert("ยกเลิกการปิดเดือนได้เฉพาะ 'เดือนล่าสุด' เท่านั้น\nกรุณาเลือกเดือนล่าสุดในช่องด้านบน"); return; }
+  if(S.hist.some(h=>h.month===m&&h.settlement)){ alert("เดือนนี้มีบัญชีย้ายออกที่เชื่อมกับยอดค้างแล้ว จึงไม่สามารถยกเลิกปิดทั้งเดือนได้ เพื่อป้องกันประวัติยอดเงินขาดหาย กรุณาแก้ไขบิลที่เกี่ยวข้องแยกเป็นรายใบแทน"); return; }
   const bills=S.hist.filter(h=>h.month===m && !h.final);
   if(!bills.length){ alert("เดือนนี้ไม่มีบิลที่ปิดแล้ว"); return; }
-  const paid=bills.filter(h=>h.paid).length;
-  if(!confirm(`ยกเลิกการปิดเดือน ${thMonth(m)}?\n• บิล ${bills.length} ใบจะถูกลบ (จ่ายแล้ว ${paid} ใบ)\n• เลขมิเตอร์จะกลับไปเป็นก่อนปิดเดือน เพื่อให้จดใหม่/แก้แล้วปิดอีกครั้ง\nควรดาวน์โหลดไฟล์สำรองไว้ก่อน ต้องการทำต่อไหม?`)) return;
+  if(bills.some(h=>h.paid||h.rc||String(h.note||"").includes("ยกเลิกใบเสร็จ"))){ alert("ยกเลิกปิดเดือนไม่ได้ เพราะมีบิลที่มีประวัติชำระเงิน/ใบเสร็จแล้ว เพื่อป้องกันการลบประวัติทางบัญชี กรุณาสำรองข้อมูลและแก้ไขบิลที่เกี่ยวข้องเป็นรายใบแทน"); return; }
+  if(!confirm(`ยกเลิกการปิดเดือน ${thMonth(m)}?\n• บิล ${bills.length} ใบที่ยังไม่มีประวัติรับเงินจะถูกลบ\n• เลขมิเตอร์จะกลับไปเป็นก่อนปิดเดือน เพื่อให้จดใหม่/แก้แล้วปิดอีกครั้ง\nควรดาวน์โหลดไฟล์สำรองไว้ก่อน ต้องการทำต่อไหม?`)) return;
   bills.forEach(b=>{
     const r=S.rooms.find(x=>x.no===b.room && !x.vacant);
     if(r && num(r.e0)===num(b.e1) && num(r.w0)===num(b.w1)){ r.e0=b.e0; r.w0=b.w0; r.e1=b.e1; r.w1=b.w1; r.other=b.other; }
@@ -2729,10 +3023,10 @@ function resetWithBackup(inp){
   const rd=new FileReader();
   rd.onload=()=>{ try{
     const x=JSON.parse(rd.result);
-    if(!x.cfg || !Array.isArray(x.rooms) || !Array.isArray(x.hist)) throw 0;
+    validateImportFile(x);
     if(!confirm("รีเซ็ตรหัสด้วยไฟล์สำรองนี้? ข้อมูลปัจจุบันในเครื่องจะถูกแทนที่ด้วยข้อมูลในไฟล์ และรหัส PIN จะถูกปิด")) return;
-    S={ cfg:Object.assign(S.cfg,x.cfg,{pin:""}), rooms:x.rooms, hist:x.hist, repairs:x.repairs||[], moves:x.moves||[], seq:x.seq||0 };
-    unlocked=true; save(); bindSettings(); pinState(); renderRooms(); renderTop(); fillMonths(); showLock();
+    S={ cfg:Object.assign(S.cfg,x.cfg,{pin:""}), rooms:x.rooms.map(normalizeRoomRecord), hist:x.hist, repairs:x.repairs||[], moves:x.moves||[], seq:x.seq||0 };
+    migrateMoveBalances(); unlocked=true; save(); bindSettings(); pinState(); renderRooms(); renderTop(); fillMonths(); showLock();
     alert("รีเซ็ตแล้ว เข้าระบบได้ (ไปตั้งรหัสใหม่ที่แท็บ ตั้งค่า)");
   }catch(e){ alert("ไฟล์ไม่ถูกต้อง"); } };
   rd.readAsText(f); inp.value="";
@@ -2751,8 +3045,9 @@ function exportTenants(){
 
 /* ================= ออนไลน์ (Firebase) ================= */
 const FB_EMBED = {"apiKey": "AIzaSyCngsM4KNKj-6fB13LVn9kzbWiePVOSEDI", "authDomain": "front-1b98a.firebaseapp.com", "projectId": "front-1b98a", "storageBucket": "front-1b98a.firebasestorage.app", "messagingSenderId": "797318273891", "appId": "1:797318273891:web:5c57e23dd1dce39fe39156"}; /* ใส่ config ตรงนี้ได้ เช่น {apiKey:"...",authDomain:"...",projectId:"...",appId:"..."} จะได้ไม่ต้องวางทุกเครื่อง */
-let FBC = FB_EMBED; try{ if(!FBC) FBC = JSON.parse(localStorage.getItem("dormFbCfg")||"null"); }catch(e){}
-const cloud = { on:false, db:null, auth:null, ready:false, pushed:{}, timer:null, unsub:null, dev:Math.random().toString(36).slice(2,8) };
+let FBC = null;
+try{ if(localStorage.getItem("dormFbDisabled")!=="1") FBC=JSON.parse(localStorage.getItem("dormFbCfg")||"null")||FB_EMBED; }catch(e){ FBC=FB_EMBED; }
+const cloud = { on:false, db:null, auth:null, ready:false, pushed:{}, timer:null, unsub:null, retryDelay:2500, dev:Math.random().toString(36).slice(2,8) };
 function setSync(t){ const e=$("syncSt"); if(e) e.textContent=t; const s=$("fbState"); if(s) s.textContent=t; }
 function parseFbCfg(t){
   t=String(t||"").trim();
@@ -2766,11 +3061,11 @@ function parseFbCfg(t){
 function fbConnect(){
   const o=parseFbCfg($("fbCfg").value);
   if(!o){ alert("อ่านค่า config ไม่ได้ ให้คัดลอกก้อน firebaseConfig ทั้งก้อนมาวาง (ต้องมี apiKey และ projectId)"); return; }
-  localStorage.setItem("dormFbCfg",JSON.stringify(o)); alert("บันทึกแล้ว กำลังโหลดใหม่เพื่อเข้าสู่หน้าล็อกอิน"); location.reload();
+  localStorage.setItem("dormFbCfg",JSON.stringify(o)); localStorage.removeItem("dormFbDisabled"); alert("บันทึกแล้ว กำลังโหลดใหม่เพื่อเข้าสู่หน้าล็อกอิน"); location.reload();
 }
 function fbDisconnect(){
   if(!confirm("ยกเลิกการเชื่อมต่อออนไลน์ในเครื่องนี้? (ข้อมูลบนคลาวด์ไม่ถูกลบ และข้อมูลในเครื่องยังอยู่)")) return;
-  localStorage.removeItem("dormFbCfg"); location.reload();
+  localStorage.removeItem("dormFbCfg"); localStorage.setItem("dormFbDisabled","1"); location.reload();
 }
 function fbLogout(){ if(cloud.auth) cloud.auth.signOut(); }
 function cloudLogin(){
@@ -2801,19 +3096,36 @@ async function cloudPush(){
   if(!ops.length){ setSync("☁️ ซิงก์แล้ว"); return; }
   try{
     const b=cloud.db.batch();
-    ops.forEach(k=>{ b.set(cloud.db.collection("dormData").doc(k),{json:c[k],by:cloud.dev,t:firebase.firestore.FieldValue.serverTimestamp()}); cloud.pushed[k]=c[k]; });
-    await b.commit(); setSync("☁️ ซิงก์แล้ว");
-  }catch(e){ ops.forEach(k=>delete cloud.pushed[k]); setSync("⚠️ บันทึกไม่สำเร็จ (จะลองใหม่เมื่อแก้ไขครั้งต่อไป)"); console.error(e); }
+    ops.forEach(k=>{ b.set(cloud.db.collection("dormData").doc(k),{json:c[k],by:cloud.dev,t:firebase.firestore.FieldValue.serverTimestamp()}); });
+    await b.commit();
+    ops.forEach(k=>cloud.pushed[k]=c[k]);
+    cloud.retryDelay=2500;
+    setSync("☁️ ซิงก์แล้ว");
+    const latest=chunks();
+    if(Object.keys(latest).some(k=>cloud.pushed[k]!==latest[k])){
+      clearTimeout(cloud.timer); cloud.timer=setTimeout(cloudPush,250);
+    }
+  }catch(e){
+    ops.forEach(k=>delete cloud.pushed[k]);
+    setSync("⚠️ บันทึกคลาวด์ไม่สำเร็จ กำลังลองใหม่อัตโนมัติ"); console.error(e);
+    clearTimeout(cloud.timer);
+    const delay=cloud.retryDelay; cloud.retryDelay=Math.min(30000,Math.max(5000,cloud.retryDelay*2));
+    cloud.timer=setTimeout(()=>{ if(cloud.on&&cloud.ready) cloudPush(); },delay);
+  }
 }
 function refreshAll(){ try{ bindSettings(); fillMonths(); renderRooms(); renderTop(); pinState(); }catch(e){ console.error(e); } }
 function cloudListen(){
   if(cloud.unsub) cloud.unsub();
-  cloud.unsub=cloud.db.collection("dormData").onSnapshot(snap=>{
+  cloud.ready=false;
+  if($("login")){ $("login").style.display="block"; $("lgMsg").textContent="เข้าสู่ระบบแล้ว กำลังโหลดข้อมูลจากคลาวด์ กรุณารอสักครู่…"; }
+  const finishCloudLoad=()=>{ if($("login")) $("login").style.display="none"; refreshAll(); };
+  cloud.unsub=cloud.db.collection("dormData").onSnapshot({includeMetadataChanges:true},snap=>{
     const have={}; snap.docs.forEach(d=>{ have[d.id]=d; });
-    if(!cloud.ready){
-      if(snap.metadata.fromCache && !have.rooms) return;
+    const firstSnapshot=!cloud.ready;
+    if(firstSnapshot){
+      if(snap.metadata && snap.metadata.fromCache) return;
       cloud.ready=true;
-      if(!have.rooms){ cloudPush(); return; }
+      if(!have.rooms){ cloudPush().then(finishCloudLoad).catch(()=>{}); return; }
     }
     let changed=false;
     Object.keys(have).forEach(id=>{
@@ -2822,18 +3134,20 @@ function cloudListen(){
       let v; try{ v=JSON.parse(json); }catch(e){ return; }
       cloud.pushed[id]=json; changed=true;
       if(id==="meta"){ S.cfg=Object.assign(S.cfg,v.cfg||{},{pin:S.cfg.pin}); S.seq=v.seq||0; }
-      else if(id==="rooms") S.rooms=v;
+      else if(id==="rooms") S.rooms=Array.isArray(v)?v.map(normalizeRoomRecord):[];
       else if(id==="repairs") S.repairs=v;
       else if(id==="moves") S.moves=v;
       else if(id.indexOf("hist_")===0){ const m=id.slice(5); S.hist=S.hist.filter(h=>h.month!==m).concat(v); }
     });
     if(changed){
+      migrateMoveBalances();
       try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){}
       const a=document.activeElement, typing=a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&!$("lock").contains(a)&&!$("login").contains(a);
       if(typing) setTimeout(refreshAll,4000); else refreshAll();
     }
     setSync("☁️ ซิงก์แล้ว");
-  },err=>{ console.error(err); setSync("⚠️ เชื่อมต่อไม่ได้: "+(err.code||"")); });
+    if(firstSnapshot) finishCloudLoad();
+  },err=>{ console.error(err); setSync("⚠️ เชื่อมต่อไม่ได้: "+(err.code||"")); if($("login")){ $("login").style.display="block"; $("lgMsg").textContent="โหลดข้อมูลคลาวด์ไม่สำเร็จ กรุณาตรวจสิทธิ์/อินเทอร์เน็ต แล้วลองใหม่"; } cloud.ready=false; });
 }
 function cloudInit(){
   const st=$("fbProj"); if(st) st.textContent = FBC ? FBC.projectId : "ยังไม่ได้เชื่อมต่อ";
@@ -2844,7 +3158,7 @@ function cloudInit(){
   try{ cloud.db.enablePersistence({synchronizeTabs:true}).catch(()=>{}); }catch(e){}
   cloud.on=true; setSync("🔒 ยังไม่ได้เข้าสู่ระบบ");
   cloud.auth.onAuthStateChanged(u=>{
-    if(u){ $("login").style.display="none"; setSync("⏳ กำลังเชื่อมต่อ…"); cloudListen(); }
+    if(u){ setSync("⏳ กำลังเชื่อมต่อ…"); cloudListen(); }
     else{ if(cloud.unsub){ cloud.unsub(); cloud.unsub=null; } cloud.ready=false; cloud.pushed={}; $("login").style.display="block"; setSync("🔒 ยังไม่ได้เข้าสู่ระบบ"); }
   });
 }
@@ -2896,20 +3210,56 @@ let skipPaidConfirm=false;
       }
     });
   }
+  /* รับเงินแบบแตะเดียว: ติ๊ก/กดรับเงิน = บันทึกทันที แล้วมีแถบแจ้งให้ "ยกเลิก" หรือ "พิมพ์ใบเสร็จ" (ไม่มีหน้าต่างถามซ้อนหลายชั้น) */
   const sp=window.setPaid;
   if(typeof sp==="function") window.setPaid=function(id,on){
-    if(!skipPaidConfirm){
-      const h=S.hist.find(x=>x.id===id);
-      if(h){
-        const msg = on ? `รับเงิน ห้อง ${h.room} จำนวน ${fmt(owed(h))} บาท ใช่ไหม?` : `ยกเลิกสถานะ "จ่ายแล้ว" ของห้อง ${h.room} ใช่ไหม?`;
-        if(!confirm(msg)){ renderHist(); return; }
-      }
+    const h=S.hist.find(x=>x.id===id);
+    if(!h) return sp.apply(this,arguments);
+    if(on && !h.paid){
+      const before={paid:h.paid,paidDate:h.paidDate,late:h.late,rc:h.rc,note:h.note,seq:S.seq};
+      const r=sp.apply(this,arguments);
+      if(h.paid) showPayToast(id,before);
+      return r;
     }
-    return sp.apply(this,arguments);
+    const r=sp.apply(this,arguments);   // ยกเลิกจ่าย: ใช้คำถามยืนยันเดิม (ถามครั้งเดียว)
+    renderHist();                        // ถ้ากดไม่ยืนยัน ให้ช่องติ๊กกลับเป็นตามสถานะจริง
+    return r;
   };
-  const qp=window.qpPay;
-  if(typeof qp==="function") window.qpPay=function(){ skipPaidConfirm=true; try{ return qp.apply(this,arguments); } finally { skipPaidConfirm=false; } };
+  window.qpPay=function(id){
+    const h=S.hist.find(x=>x.id===id); if(!h||h.paid) return;
+    window.setPaid(id,true);
+    $("qp").value=""; qpRender();
+  };
+  /* ใส่ปุ่ม "✅ รับเงิน" ในบิลค้าง (ไม่ต้องหาช่องติ๊กเล็กๆ) */
+  const hr=window.histRow;
+  if(typeof hr==="function") window.histRow=function(h,sm){
+    let s=hr.apply(this,arguments);
+    if(!h.paid && !h.movedToFinal && !(h.settlement && num(h.total)<=0)){
+      s=s.replace('<div class="btns">',`<div class="btns"><button class="sm" onclick="setPaid('${esc(h.id)}',true)">✅ รับเงิน</button>`);
+    }
+    return s;
+  };
 })();
+let payToastT=null;
+function hidePayToast(){ const t=$("payToast"); if(t) t.classList.remove("on"); clearTimeout(payToastT); }
+function showPayToast(id,before){
+  const h=S.hist.find(x=>x.id===id); if(!h) return;
+  let t=$("payToast");
+  if(!t){ t=document.createElement("div"); t.id="payToast"; document.body.appendChild(t); }
+  t.innerHTML=`<div>✅ ห้อง <b>${esc(h.room)}</b> รับเงิน <b>${fmt(owed(h))}</b> บาทแล้ว</div>
+    <div class="pt-b"><button class="sm gray" id="ptUndo">↩️ ยกเลิก</button><button class="sm" id="ptPrint">🧾 พิมพ์ใบเสร็จ</button></div>`;
+  t.classList.add("on");
+  $("ptUndo").onclick=()=>{
+    const x=S.hist.find(y=>y.id===id); if(x){
+      x.paid=before.paid; x.paidDate=before.paidDate; x.late=before.late; x.rc=before.rc;
+      if(before.note===undefined) delete x.note; else x.note=before.note;
+      S.seq=before.seq; save(); renderHist(); renderSummary(); renderDash();
+    }
+    hidePayToast();
+  };
+  $("ptPrint").onclick=()=>{ hidePayToast(); printReceipt(id); };
+  clearTimeout(payToastT); payToastT=setTimeout(hidePayToast,10000);
+}
 
 /* ================= ตั้งค่าห้องทั้งชั้น ================= */
 let frFloors=[], frBy={};
@@ -2940,12 +3290,13 @@ function openFloorRent(){
 }
 function frApply(){
   const keep=$("fr_keep").checked, plan=[];
-  frFloors.forEach((f,k)=>{
-    const v=$("fr_"+k).value; if(v==="") return;
-    const price=num(v), ids=frBy[f], common=frCommon(ids);
+  for(const f of frFloors){
+    const k=frFloors.indexOf(f), v=$("fr_"+k).value; if(v==="") continue;
+    if(!Number.isFinite(Number(v))||Number(v)<0){ alert("ค่าห้องชั้น "+f+" ต้องเป็นตัวเลขที่ไม่ติดลบ"); return; }
+    const price=Number(v), ids=frBy[f], common=frCommon(ids);
     const target=ids.filter(i=>!keep || num(S.rooms[i].rent)===common);
     plan.push({f,price,target,skipped:ids.length-target.length});
-  });
+  }
   if(!plan.length){ alert("ยังไม่ได้ใส่ราคาชั้นไหนเลย"); return; }
   const msg=plan.map(x=>`ชั้น ${x.f}: ${x.target.length} ห้อง → ${fmt(x.price).replace(".00","")} บาท${x.skipped?` (ข้ามห้องพิเศษ ${x.skipped})`:""}`).join("\n");
   if(!confirm("ยืนยันแก้ค่าห้อง?\n"+msg)) return;
@@ -2975,7 +3326,7 @@ function mpPreview(){
     const e=t[1]!==undefined?Number(String(t[1]).replace(/,/g,"")):NaN, w=t[2]!==undefined?Number(String(t[2]).replace(/,/g,"")):NaN;
     if(idx<0){ bad.push(`${esc(line)} → ไม่พบห้อง ${esc(t[0])}`); return; }
     if(S.rooms[idx].vacant){ bad.push(`${esc(line)} → ห้อง ${esc(t[0])} เป็นห้องว่าง`); return; }
-    if(isNaN(e)||isNaN(w)){ bad.push(`${esc(line)} → ต้องมีเลขไฟและเลขน้ำ`); return; }
+    if(!Number.isFinite(e)||!Number.isFinite(w)||e<0||w<0){ bad.push(`${esc(line)} → ต้องมีเลขไฟและเลขน้ำเป็นตัวเลขไม่ติดลบ`); return; }
     const r=S.rooms[idx], tmp=Object.assign({},r,{e1:e,w1:w}), c=calc(tmp);
     mpRows.push({idx,e,w,c,warn:warnings(tmp)});
   });
@@ -2987,7 +3338,7 @@ function mpPreview(){
 function mpApply(){
   if(!mpRows.length) return;
   snapNow("ก่อนวางเลขมิเตอร์");
-  mpRows.forEach(x=>{ const r=S.rooms[x.idx]; r.e1=String(x.e); r.w1=String(x.w); });
+  mpRows.forEach(x=>{ const r=S.rooms[x.idx]; r.e1=String(x.e); r.w1=String(x.w); r.eRead=true; r.wRead=true; });
   const n=mpRows.length; mpRows=[]; save(); moClose(); renderRooms(); renderTop();
   alert("บันทึกเลขมิเตอร์ "+n+" ห้องแล้ว ตรวจเลขที่มีตัวหนังสือสีแดงเตือนอีกครั้ง");
 }
@@ -3021,11 +3372,11 @@ function restoreSnap(i){
   if(!confirm("กู้คืนข้อมูลกลับไปเป็นชุดนี้?\nข้อมูลปัจจุบันจะถูกแทนที่ (ระบบเก็บสำเนาปัจจุบันไว้ให้ก่อน) และจะซิงก์ขึ้นคลาวด์ด้วย")) return;
   try{
     const x=JSON.parse(s.json);
-    if(!x.cfg || !Array.isArray(x.rooms) || !Array.isArray(x.hist)) throw 0;
+    validateImportFile(x);
     snapNow("ก่อนกู้คืน");
     const keepPin=S.cfg.pin, keepLogo=S.cfg.logo;
-    S={ cfg:Object.assign({},S.cfg,x.cfg,{pin:keepPin,logo:keepLogo}), rooms:x.rooms, hist:x.hist, repairs:x.repairs||[], moves:x.moves||[], seq:x.seq||0 };
-    save(); refreshAll(); renderSnaps(); alert("กู้คืนข้อมูลแล้ว");
+    S={ cfg:Object.assign({},S.cfg,x.cfg,{pin:keepPin,logo:keepLogo}), rooms:x.rooms.map(normalizeRoomRecord), hist:x.hist, repairs:x.repairs||[], moves:x.moves||[], seq:x.seq||0 };
+    migrateMoveBalances(); save(); refreshAll(); renderSnaps(); alert("กู้คืนข้อมูลแล้ว");
   }catch(e){ alert("กู้คืนไม่สำเร็จ"); }
 }
 /* ครอบฟังก์ชันเดิมที่เสี่ยง: ทำสำเนาให้ก่อน แล้วเรียกฟังก์ชันเดิมตามปกติ */
