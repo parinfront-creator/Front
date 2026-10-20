@@ -2183,7 +2183,7 @@ function clDocNew(b, rc){
   const extra=Math.max(0,other-svc);
   const sub=(n,name,amt)=>`<tr><td></td><td colspan="3">&nbsp;&nbsp;${n}. ${name}</td><td class="n">${fmt(amt)}</td></tr>`;
   let k=0;
-  const subs = sub(++k,"ค่าบริการทั่วไป",svc) + (extra>0 ? sub(++k,"ค่าอื่นๆ",extra) : "") + sub(++k,"ค่าการ์ด",0) + sub(++k,"ค่าประกัน",0);
+  const subs = sub(++k,"ค่าบริการทั่วไป",svc) + (extra>0 ? sub(++k,"ค่าอื่นๆ",extra) : "") + sub(++k,"ค่าจอดรถ",0) + sub(++k,"ค่าประกัน",0);
   return `<div class="bill cl">${hd}
     <div class="cl-i">${rc?"วันที่รับเงิน":"พิมพ์เมื่อ วันที่"} ${stamp}<br>
       ${rc?"ได้รับเงินจาก":"เรียกเก็บเงินจาก"} ${esc(b.tenant)||"-"}<br>
